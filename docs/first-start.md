@@ -2,14 +2,17 @@
 
 [Documentation index](./README.md) · [Project README](../README.md)
 
-1. Build and flash the firmware, then upload the web files to LittleFS:
+1. Connect the controller over USB, identify its serial port and build/flash
+   the **matching** firmware and LittleFS assets. For the base KC868-A6:
 
 	```sh
-	pio run
-	pio run -t upload
-	pio run -t uploadfs
+	pio run -e kc868-a6
+	pio run -e kc868-a6 -t upload --upload-port /dev/ttyUSB0
+	pio run -e kc868-a6 -t uploadfs --upload-port /dev/ttyUSB0
 	```
 
+	Use the correct COM port on Windows. Firmware and filesystem are separate
+	uploads; do not combine the targets in one command.
 2. Join the open `KC868-A6-XXXX` access point and open `http://192.168.4.1`.
 	Setup mode does not request Wi-Fi or web login passwords.
 3. Choose a Wi-Fi network in the panel. Credentials are stored in ESP32 NVS;
@@ -47,6 +50,9 @@ host/IP and port separately in the UDP Send action in IO/IFTTT.
 `GET /api/network` and `/api/status` expose hostname, mDNS readiness, IP and
 listener address/port. There is no configurable UDP bind-address selector yet.
 
+The WebGUI pages and their controls are described in the
+[WebGUI guide](./webgui.md), which includes screenshots from a working device.
 The header reports chip model, core count and configured MHz, free/total heap,
-PSRAM availability and physical flash/application size. MHz is not CPU load,
-and heap capacity is not a claim about all physical SRAM.
+PSRAM availability and physical flash/application size. Newer firmware may
+also report remaining OTA application space and per-core CPU utilization.
+MHz is not CPU load, and heap capacity is not a claim about all physical SRAM.

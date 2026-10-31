@@ -5,6 +5,7 @@
 #include <LittleFS.h>
 #include <WiFi.h>
 
+#include "board/target_model.h"
 #include "config/settings_json.h"
 #include "web/board_status.h"
 #include "web/capabilities.h"
@@ -193,6 +194,28 @@ void WifiWebUi::startSetupAccessPoint() {
 }
 
 void WifiWebUi::startServer() {
+    server_.on("/favicon.svg", HTTP_GET, [this]() {
+        const String model(kc868a6::board::targetModel.data());
+        const int separator = model.lastIndexOf('-');
+        const String badge = separator >= 0 ? model.substring(separator + 1) : model;
+        String icon;
+        icon.reserve(320);
+        icon = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\">"
+               "<rect width=\"64\" height=\"64\" rx=\"9\" fill=\"#183c32\"/>"
+               "<path d=\"M0 49h64v15H0z\" fill=\"#d8f35c\"/>"
+               "<text x=\"32\" y=\"34\" text-anchor=\"middle\" "
+               "font-family=\"sans-serif\" font-size=\"";
+        icon += badge.length() > 2 ? "20" : "25";
+        icon += "\" font-weight=\"800\" fill=\"#fff\">";
+        icon += badge;
+        icon += "</text></svg>";
+        server_.sendHeader("Cache-Control", "no-cache");
+        server_.send(200, "image/svg+xml", icon);
+    });
+    server_.on("/favicon.ico", HTTP_GET, [this]() {
+        server_.sendHeader("Location", "/favicon.svg", true);
+        server_.send(302, "text/plain", "");
+    });
     server_.on("/", HTTP_GET, [this]() {
         if (requireAuthentication()) serveFile("/index.html");
     });

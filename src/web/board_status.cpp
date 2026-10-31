@@ -1,4 +1,5 @@
 #include "web/board_status.h"
+#include "board/target_model.h"
 
 namespace kc868a6::web {
 
@@ -7,7 +8,8 @@ core::Result writeBoardStatus(JsonObject destination, const DeviceSettings &sett
     if (destination.isNull()) return {core::ErrorCode::CapacityExceeded, "board_json"};
     board::ResourceManager resources;
     const auto planned = board::planResources(settings, options, resources);
-    bool written = destination["board"].set("KC868-A6") &&
+    bool written = destination["board"].set(board::targetModel.data()) &&
+                   destination["pinoutValidated"].set(board::targetPinoutValidated) &&
                    destination["uartCount"].set(board::uartCount) &&
                    destination["uart1Mode"].set(settings.uart1Mode) &&
                    destination["configurationReady"].set(configStatus.ok()) &&

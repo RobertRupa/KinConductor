@@ -3,21 +3,23 @@
 [Project README](../README.md)
 
 This repository-local Markdown wiki is maintained alongside the firmware.
-No documentation build or external service is required.
+English is the default language for repository documentation. No
+documentation build or external service is required.
 
 ## Chapters
 
 1. [Build, upload and validation](./build.md)
 2. [First start and web access](./first-start.md)
-3. [Board resources and wiring](./hardware.md)
-4. [Peripherals, interfaces and automation](./peripherals.md)
-5. [Architecture and refactoring](./refactoring.md)
-6. [Implementation plan and acceptance criteria](../REFACTOR_TODO.md)
-7. [Calibrated current sensors and loop receivers](./current-measurement.md)
-8. [Manufacturer resources and compatibility](./manufacturer-sources.md)
-9. [Tagged release images and CI](./releases.md)
-10. [LLM project memory and instructions](./llm-memory.md)
-11. [Completed refactoring work](../TODO_REFACTORED.md)
+3. [WebGUI: pages, configuration and flashing](./webgui.md)
+4. [Board resources and wiring](./hardware.md)
+5. [Peripherals, interfaces and automation](./peripherals.md)
+6. [Architecture and refactoring](./refactoring.md)
+7. [Implementation plan and acceptance criteria](../REFACTOR_TODO.md)
+8. [Calibrated current sensors and loop receivers](./current-measurement.md)
+9. [Manufacturer resources and compatibility](./manufacturer-sources.md)
+10. [Tagged release images and CI](./releases.md)
+11. [LLM project memory and instructions](./llm-memory.md)
+12. [Completed refactoring work](../TODO_REFACTORED.md)
 
 The chapters describe current behavior; the implementation plan also describes
 future work. A build flag or resource reservation is not evidence that a

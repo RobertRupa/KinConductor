@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#183c32">
   <title>KinConductor | KC868-A6</title>
+  <link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
   <script src="/capabilities.js" defer></script>
@@ -12,8 +13,8 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="KinConductor">
-      <span class="brand-mark" aria-hidden="true">A6</span>
-      <span><strong>KinConductor</strong><small>KC868-A6 · <span data-i18n="controller">sterownik</span></small></span>
+      <span class="brand-mark" id="brandMark" aria-hidden="true">A6</span>
+      <span><strong>KinConductor</strong><small><span id="headerModel">KC868-A6</span> · <span data-i18n="controller">sterownik</span></small></span>
     </a>
     <dl class="hardware-summary" id="hardwareSummary" aria-label="Hardware">
       <div><dt>CPU</dt><dd id="headerCpu">--</dd></div>
@@ -359,7 +360,7 @@
           <p class="diagnostic-line"><span data-i18n="beeperConfig">BEEPER · DA-1</span><strong id="diagnosticBeeperState">--</strong></p>
         </section>
         <section class="panel board-panel">
-          <div class="panel-heading"><div><p class="eyebrow">KC868-A6</p><h2 data-i18n="boardPinout">Wyprowadzenia i zasoby</h2></div></div>
+          <div class="panel-heading"><div><p class="eyebrow" id="diagnosticModel">KC868-A6</p><h2 data-i18n="boardPinout">Wyprowadzenia i zasoby</h2></div></div>
           <p class="form-message" id="boardMessage" role="status">--</p>
           <p class="field-note" data-i18n="boardPlanNote">Rezerwacje konfiguracji, nie detekcja sprzętu. P17 nie dodaje czwartego UART. GPIO12: pin strapping.</p>
           <p class="field-note" id="boardExpanders">--</p>

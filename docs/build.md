@@ -35,7 +35,7 @@ This remains a tight budget, not capacity for all planned radio/protocol stacks.
 
 Base firmware without RF24/coprocessor and latest assets were flashed to the
 approved `/dev/ttyUSB0`, both hashes verified, NVS preserved.
-Live device `192.168.69.249`: seven modules / 51 properties; header confirms
+Live KC868-A6 device: seven modules / 51 properties; header confirms
 ESP32-D0WD-V3, two cores at 240 MHz, no PSRAM, 4 MiB flash.
 Thirty consecutive capability responses parsed successfully after fixing a
 transient truncated-JSON response caused by heap reallocation: the pool is
@@ -45,7 +45,8 @@ Observed live heap minimum during this stress check: 21,772 B; this is not a
 worst-case multi-peripheral guarantee.
 
 Hostname canonicalization/save/reconnect and actual LAN mDNS resolution
-`kinconductor-test.local → 192.168.69.249` passed; hostname was restored.
+The temporary `kinconductor-test.local` mDNS name resolved to the controller;
+the original hostname was restored.
 Current-config invalid requests preserve the previous record; browser ADC
 capture, voltage-mode save and uncalibrated quality passed, then all channels
 were restored OFF. Hostname/calibration survived the subsequent asset-upload
@@ -231,6 +232,16 @@ These aliases currently extend the same base firmware layout as A6 and add a
 model identifier macro for packaging/diagnostics workflows. They are **not**
 proof of full board-level pinout/peripheral compatibility; validate each board
 against its schematic/resources before deployment.
+
+The firmware reports the selected model in the dashboard and generates a
+matching SVG favicon at runtime. For Ax aliases other than A6, diagnostics
+explicitly warns that the displayed GPIO/resource map is still the KC868-A6
+baseline. No model-specific pin/IO map has been verified or implemented yet;
+do not deploy these aliases on other boards as electrically validated images.
+The header's free-flash figure is remaining capacity in the running OTA
+application partition, not unused capacity across every flash partition.
+Per-core CPU utilization is shown when the target FreeRTOS build provides idle
+runtime counters.
 
 Each completed refactor slice ends with updating README, the implementation
 checklist and affected project metadata/manifests. Change dependencies,

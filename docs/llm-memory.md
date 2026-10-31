@@ -7,6 +7,10 @@ This is version-controlled engineering context, not an automatic runtime memory
 store. Update facts when verified; do not record passwords, tokens, private
 network names, serial output or unverified assumptions.
 
+Repository documentation defaults to English. Keep code/API identifiers,
+commands and source quotations unchanged; write documentation updates in
+English unless another language is explicitly requested.
+
 ## Stable decisions
 
 - Base and coprocessor are the only maintained profiles; explicit base for a
@@ -85,3 +89,11 @@ network names, serial output or unverified assumptions.
   mode settings use named choices, transport data textarea uses LF, grid bounds
   refresh after resize. Both maintained builds still omit RF24. Firmware size
   is unchanged from v1.1.1; this version also has no physical deployment.
+- [WebGUI wiki chapter](./webgui.md) has screenshots re-captured in English
+  (EN selected) from the reachable KC868-A6 running firmware 1.1.0 on
+  2026-10-31; device API endpoints returned HTTP 200. Screenshot-only event
+  translations and redactions were local to the browser; no device settings
+  were changed. Network identifiers, BLE MAC and UDP port are redacted. These
+  live screenshots are historical and may not match the repository's newer
+  1.1.2 assets; flash firmware and matching LittleFS before using them as
+  current UI acceptance references.

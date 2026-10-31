@@ -61,6 +61,8 @@ const translations = {
     boardPinout: "Wyprowadzenia i zasoby", boardRole: "Rola", boardOwner: "Rezerwacja",
     boardLimits: "Ograniczenia", boardInputOnly: "tylko wejście", boardStrapping: "strapping",
     boardPlanNote: "Rezerwacje konfiguracji, nie detekcja sprzętu. P17 nie dodaje czwartego UART. GPIO12: pin strapping.",
+    boardPinoutUnvalidated: "UWAGA: mapowanie pinów poniżej jest profilem bazowym KC868-A6, a nie zweryfikowanym pinoutem tej płyty.",
+    flashFreeOta: "wolne OTA",
     boardValid: "Plan zasobów poprawny", boardError: "Nie udało się odczytać profilu płytki.",
     boardConfigUnavailable: "Konfiguracja niedostępna; pokazano ostatnie ustawienia RAM lub defaults.",
     runtimeStatus: "Stan urządzenia", rf24RadioState: "nRF24", rf24LastPacket: "Ostatni pakiet",
@@ -186,6 +188,8 @@ const translations = {
     boardPinout: "Pinout and resources", boardRole: "Role", boardOwner: "Reservation",
     boardLimits: "Constraints", boardInputOnly: "input only", boardStrapping: "strapping",
     boardPlanNote: "Configuration reservations, not hardware detection. P17 does not add a fourth UART. GPIO12: strapping pin.",
+    boardPinoutUnvalidated: "WARNING: the pin map below is the KC868-A6 baseline, not a validated pinout for this board.",
+    flashFreeOta: "OTA free",
     boardValid: "Resource plan valid", boardError: "Could not read the board profile.",
     boardConfigUnavailable: "Configuration unavailable; showing last RAM settings or defaults.",
     runtimeStatus: "Device status", rf24RadioState: "nRF24", rf24LastPacket: "Last packet",
@@ -345,7 +349,8 @@ async function refreshBoardStatus() {
     if (!Array.isArray(data.pins) || !Array.isArray(data.claims) ||
         typeof data.configurationReady !== "boolean" || typeof data.valid !== "boolean" ||
         typeof data.configurationError !== "string" || typeof data.error !== "string" ||
-        typeof data.subject !== "string" || !Number.isInteger(data.inputAddress) ||
+        typeof data.subject !== "string" || typeof data.pinoutValidated !== "boolean" ||
+        !Number.isInteger(data.inputAddress) ||
         !data.relays || !["address", "portMask", "reservedMask"].every(
           (key) => Number.isInteger(data.relays[key])) ||
         !data.pins.every((pin) => pin && Number.isInteger(pin.gpio) &&
@@ -373,6 +378,9 @@ function renderBoardStatus() {
   $("#boardMessage").textContent = !data.configurationReady
     ? `${t("boardConfigUnavailable")} (${data.configurationError})`
     : data.valid ? t("boardValid") : `${data.error}: ${data.subject}`;
+  if (!data.pinoutValidated) {
+    $("#boardMessage").textContent += ` · ${t("boardPinoutUnvalidated")}`;
+  }
   const hex = (value) => `0x${Number(value).toString(16).padStart(2, "0")}`;
   $("#boardExpanders").textContent =
     `PCF8574 DI: ${hex(data.inputAddress)} P0-P7 | PCF8574 RLY: ${hex(data.relays.address)} P0-P5 (${hex(data.relays.portMask)}), P6-P7 ${hex(data.relays.reservedMask)}`;
@@ -400,16 +408,32 @@ function renderHardware(hardware) {
       typeof hardware.cpu.model !== "string" ||
       ![hardware.cpu.cores, hardware.cpu.frequencyMHz, hardware.ram.heapBytes,
         hardware.ram.freeBytes, hardware.psram.totalBytes, hardware.psram.freeBytes,
-        hardware.flash.totalBytes, hardware.flash.firmwareBytes].every(
+        hardware.flash.totalBytes, hardware.flash.firmwareBytes,
+        hardware.flash.appPartitionBytes, hardware.flash.freeBytes].every(
         (value) => Number.isFinite(value) && value >= 0)) {
     ids.forEach((id) => { $(id).textContent = "--"; });
     return;
   }
   const kib = (value) => `${Math.round(value / 1024)} KiB`;
-  $("#headerCpu").textContent = `${hardware.cpu.model} · ${hardware.cpu.cores}× ${hardware.cpu.frequencyMHz} MHz`;
+  const model = typeof hardware.cpu.boardModel === "string" ? hardware.cpu.boardModel : "KC868-A6";
+  const coreLoad = hardware.cpu.loadAvailable && Array.isArray(hardware.cpu.coreLoadPercent) &&
+      hardware.cpu.coreLoadPercent.length === hardware.cpu.cores &&
+      hardware.cpu.coreLoadPercent.every((value) => Number.isFinite(value) && value >= 0 && value <= 100)
+    ? ` · ${hardware.cpu.coreLoadPercent.map((value, index) => `C${index} ${value}%`).join(" / ")}`
+    : "";
+  $("#headerCpu").textContent = `${hardware.cpu.model} · ${hardware.cpu.cores}× ${hardware.cpu.frequencyMHz} MHz${coreLoad}`;
   $("#headerRam").textContent = `${kib(hardware.ram.freeBytes)} / ${kib(hardware.ram.heapBytes)} heap`;
   $("#headerPsram").textContent = hardware.psram.totalBytes ? `${kib(hardware.psram.freeBytes)} / ${kib(hardware.psram.totalBytes)}` : "0";
-  $("#headerFlash").textContent = `${(hardware.flash.totalBytes / 1048576).toFixed(0)} MiB · FW ${kib(hardware.flash.firmwareBytes)}`;
+  $("#headerFlash").textContent =
+    `${(hardware.flash.totalBytes / 1048576).toFixed(0)} MiB · ${kib(hardware.flash.freeBytes)} ${t("flashFreeOta")} · FW ${kib(hardware.flash.firmwareBytes)}`;
+  $("#headerModel").textContent = model;
+  $("#diagnosticModel").textContent = model;
+  $("#brandMark").textContent = model.replace(/^KC868-/, "");
+  if (typeof document !== "undefined") {
+    document.title = `KinConductor | ${model}`;
+    const favicon = $("#favicon");
+    if (favicon) favicon.href = `/favicon.svg?model=${encodeURIComponent(model)}`;
+  }
 }
 
 function renderStatus(data) {

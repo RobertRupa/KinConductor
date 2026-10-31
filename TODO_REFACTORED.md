@@ -414,11 +414,12 @@ LittleFS 917 504 B. Zależności budować sekwencyjnie z testami, nie zmieniać
 
 Po potwierdzeniu bezpiecznych obciążeń wgrano base bez RF24/coprocesora
 i matching LittleFS na `/dev/ttyUSB0`, oba hashe verified, NVS zachowane.
-Real `192.168.69.249`: 7 modules/51 properties, CPU2×240MHz,
+Real KC868-A6: 7 modules/51 properties, CPU2×240MHz,
 PSRAM0/flash4MiB. 30 consecutive capability JSON responses PASS;
 observed stress minheap21 772 B, nie worst-case guarantee.
 Hostname change/canonicalization/reconnect/readback PASS oraz real LAN
-mDNS `kinconductor-test.local → 192.168.69.249`; przywrócono `kinconductor`.
+mDNS `kinconductor-test.local` resolved to the device; `kinconductor`
+was restored.
 Calibration invalid payloads rejected bez zmiany record; real browser
 ADC capture/Voltage-save/warming_up PASS; wszystkie kanały przywrócono OFF.
 Hostname/calibration survive reset PASS. Mobile390px: input38px,
@@ -516,3 +517,55 @@ test fizycznej obecności i NVS po zaniku zasilania pozostają do wykonania.
 Image sizes/headroom/RAM nie zmieniły się od v1.1.1. Nie wykonano uploadu
 na hardware, push do GitHub ani rzeczywistego Actions run. Szerszy plan
 architektury i fizyczne kryteria akceptacji pozostają otwarte.
+
+### Profile identity and runtime headroom — 2026-10-31
+
+- [x] Firmware carries `KC868_TARGET_MODEL`; dashboard title, model badge and
+  generated SVG favicon reflect the selected Ax build.
+- [x] Diagnostics includes `pinoutValidated`; non-A6 aliases warn that the
+  displayed map is the A6 baseline. Separate Ax electrical pin/IO profiles
+  remain **not implemented** pending model/revision schematics and validation.
+- [x] Hardware summary reports remaining capacity in the running OTA app
+  partition explicitly, alongside firmware size and total flash.
+- [x] ESP-IDF FreeRTOS idle runtime counters report per-core CPU utilization
+  when enabled by the target build; native UI test covers the displayed shape.
+
+### Wiki screenshots and installation guide — 2026-10-31
+
+- [x] Added [WebGUI guide](./docs/webgui.md) with live screenshots for
+  Dashboard, IO, Sensors, Interfaces, IFTTT, Screen, Settings and Diagnostics.
+  Captures came from the reachable KC868-A6 instance running firmware 1.1.0;
+  status/configuration/capabilities endpoints returned HTTP 200.
+- [x] Redacted network name, local IP, BLE MAC and UDP port in screenshots.
+  Hardware and product reference images were added with source/revision caveats.
+- [x] Expanded the hardware chapter with manufacturer images and explicit
+  warnings about conflicting product-sheet/diagram analog and relay claims.
+- [x] Updated the first-start flash commands to select the A6 profile and upload
+  firmware and LittleFS separately. No flash/upload was performed for this docs task.
+- [x] Re-captured all eight live WebGUI screenshots with the **EN** language
+  selected after the initial Polish captures. Screenshot-only event translations
+  and redactions were applied locally; device configuration was not changed.
+  Verified all eight images show English page navigation and labels; SSID,
+  local IP, BLE MAC and UDP port remain hidden. IFTTT shows the three saved
+  rules present at capture time.
+
+### English README and wiki default — 2026-10-31
+
+- [x] Translated the live WebGUI wiki chapter into English and verified its
+  screenshots, hardware instructions, warnings and cross-links.
+- [x] Confirmed the top-level README, documentation index and existing build,
+  hardware, release, peripheral, first-start and architecture chapters are
+  written in English.
+- [x] Set English as the default for repository documentation in `AGENTS.md`,
+  the README and documentation index. Keep identifiers, API fields, commands
+  and quoted source text unchanged unless localization is explicitly requested.
+
+### Release preparation — v1.1.3
+
+- [x] Package and firmware version metadata advanced together from 1.1.2 to
+  1.1.3 for the selected KC868-Ax build identity and diagnostics changes.
+- [x] Removed the live controller's private LAN IP from tracked documentation.
+- [x] `npm test` passed; both maintained firmware profiles and both matching
+  LittleFS images built successfully with the 1.1.3 metadata.
+- [ ] Create and push the immutable `v1.1.3` tag; verify the remote tag-triggered
+  GitHub Actions build and release before claiming publication succeeded.

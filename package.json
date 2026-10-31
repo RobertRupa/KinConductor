@@ -1,7 +1,7 @@
 {
   "name": "kinconductor",
-  "version": "1.1.2",
-  "description": "KinConductor KC868-A6 firmware with calibrated current inputs, hostname/mDNS, grouped WebGUI, eight independent BLE presence targets, per-rule UDP/serial IFTTT, PWM and OLED grids",
+  "version": "1.1.3",
+  "description": "KinConductor KC868-Ax ESP32 firmware with board identity, calibrated current inputs, hostname/mDNS, grouped WebGUI, BLE presence, UDP/serial IFTTT, PWM and OLED grids",
   "private": true,
   "directories": {
     "doc": "docs",

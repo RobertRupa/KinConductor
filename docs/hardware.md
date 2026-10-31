@@ -27,6 +27,34 @@
 | Reset | EN | Hardware reset; not a normal GPIO. |
 | Wi-Fi / Bluetooth | ESP32-WROOM-32 radio | No external GPIO assignment. |
 
+## Manufacturer reference images
+
+These supplied manufacturer illustrations are useful for identifying board
+connectors and advertised product features. Always confirm wiring against the
+schematic and PCB revision for the board being installed.
+
+![KC868-A6 board overview with labeled connectors and optional modules](./assets/kc868-a6-board-overview.jpg)
+
+*Board overview labeled KC868-A6 V1.3. Connector and optional-module labels
+are visual references; they do not show every pin conflict in this firmware.*
+
+![KC868-A6 advertised product parameters](./assets/kc868-a6-product-specifications.jpg)
+
+*Manufacturer product-parameter sheet. It advertises six relay outputs, two
+DAC outputs and two 0–5 V analog inputs; verify the exact PCB and signal
+conditioning before connecting a load or sensor.*
+
+![KC868-A6 smart controller system block diagram](./assets/kc868-a6-system-block-diagram.jpg)
+
+*Manufacturer system block diagram. The illustration describes some analog
+channels as 4–20 mA and shows an expander with eight relay outputs, which does
+not match every A6 product-sheet/schematic description. Treat it as a
+high-level illustration, not an electrical wiring authority.*
+
+For board-specific wiring and revision notes, see
+[manufacturer sources](./manufacturer-sources.md) and the official
+[KC868-A6 product/schematic page](https://www.kincony.com/esp32-6-channel-relay-module-kc868-a6.html).
+
 The manufacturer schematic is used for the peripheral wiring. Older
 manufacturer forum replies list the LoRa RESET/DIO0 lines differently (GPIO14
 and GPIO21); the schematic and currently edited post label RESET as GPIO21 and DIO0 as GPIO2.

@@ -14,8 +14,11 @@
 #include <Wire.h>
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeMono9pt7b.h>
+#include <esp_ota_ops.h>
+#include <freertos/idf_additions.h>
 
 #include "kc868_a6_pins.h"
+#include "board/target_model.h"
 #include "wifi_web_ui.h"
 #include "core/peripheral_registry.h"
 #include "peripherals/analog_inputs.h"
@@ -568,6 +571,17 @@ String deviceStatusJson() {
     hardware["cpu"]["cores"] = ESP.getChipCores();
     hardware["cpu"]["frequencyMHz"] = ESP.getCpuFreqMHz();
     hardware["cpu"]["revision"] = ESP.getChipRevision();
+    hardware["cpu"]["boardModel"] = kc868a6::board::targetModel.data();
+#if defined(CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS) && CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS && !CONFIG_FREERTOS_SMP && INCLUDE_xTaskGetIdleTaskHandle == 1
+    hardware["cpu"]["loadAvailable"] = true;
+    JsonArray coreLoad = hardware["cpu"].createNestedArray("coreLoadPercent");
+    for (uint8_t core = 0; core < ESP.getChipCores(); ++core) {
+        const uint32_t idlePercent = ulTaskGetIdleRunTimePercentForCore(core);
+        coreLoad.add(idlePercent <= 100 ? 100 - idlePercent : 0);
+    }
+#else
+    hardware["cpu"]["loadAvailable"] = false;
+#endif
     hardware["ram"]["heapBytes"] = ESP.getHeapSize();
     hardware["ram"]["freeBytes"] = ESP.getFreeHeap();
     hardware["ram"]["minFreeBytes"] = ESP.getMinFreeHeap();
@@ -575,8 +589,13 @@ String deviceStatusJson() {
     hardware["psram"]["freeBytes"] = ESP.getFreePsram();
     hardware["flash"]["totalBytes"] = ESP.getFlashChipSize();
     hardware["flash"]["frequencyHz"] = ESP.getFlashChipSpeed();
-    hardware["flash"]["firmwareBytes"] = ESP.getSketchSize();
-    hardware["flash"]["otaSlotBytes"] = ESP.getFreeSketchSpace();
+    const esp_partition_t *runningPartition = esp_ota_get_running_partition();
+    const uint32_t appPartitionBytes = runningPartition ? runningPartition->size : 0;
+    const uint32_t firmwareBytes = ESP.getSketchSize();
+    hardware["flash"]["firmwareBytes"] = firmwareBytes;
+    hardware["flash"]["appPartitionBytes"] = appPartitionBytes;
+    hardware["flash"]["freeBytes"] =
+        appPartitionBytes > firmwareBytes ? appPartitionBytes - firmwareBytes : 0;
     hardware["firmwareVersion"] = KINCONDUCTOR_VERSION;
     document["beeper"]["pin"] = settings.beeperPin;
 

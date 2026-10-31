@@ -5,6 +5,10 @@ PlatformIO, C++17; dependency-free JavaScript WebGUI served from LittleFS.
 
 - Read [project memory](docs/llm-memory.md) for verified decisions/limits and
   [documentation](docs/README.md) for contracts and hardware precautions.
+- Write repository documentation in English by default. Keep code identifiers,
+  API fields and hardware labels unchanged; translate user-facing prose and
+  update existing Markdown when touching it. Use another language only when
+  explicitly requested or required for a quoted source.
 - [REFACTOR_TODO.md](REFACTOR_TODO.md) contains remaining scope;
   [TODO_REFACTORED.md](TODO_REFACTORED.md) records verified completed slices.
   Move only implemented and verified work, not an entire partially done task.

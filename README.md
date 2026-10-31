@@ -11,12 +11,14 @@ The full expansion plan is **not complete**.
 ## Documentation
 
 The documentation is a repository-local Markdown wiki, without an additional
-site generator or dependencies. Start with the [documentation index](./docs/README.md).
+site generator or dependencies. English is the default language for repository
+documentation. Start with the [documentation index](./docs/README.md).
 
 | Chapter | Contents |
 | --- | --- |
 | [Build and upload](./docs/build.md) | PlatformIO profiles, tests, firmware and LittleFS deployment |
 | [First start](./docs/first-start.md) | Wi-Fi provisioning, mDNS, web login and access precautions |
+| [WebGUI guide and screenshots](./docs/webgui.md) | Live page screenshots, configuration guide and firmware/LittleFS flashing |
 | [Hardware](./docs/hardware.md) | GPIO pinout, buses, wiring, conflicts and manufacturer sources |
 | [Peripherals and automation](./docs/peripherals.md) | Sensors, serial ports, radios, OLED, BLE, beeper and local IFTTT |
 | [Architecture and refactoring](./docs/refactoring.md) | Implemented contracts, NVS migration and current limitations |
@@ -52,6 +54,11 @@ UDP/serial action data supports multiline LF text. Screen-grid inputs have
 consistent sizing and position limits that update when the grid changes.
 Both firmware and LittleFS must be updated to deploy these fixes; v1.1.2
 has not been uploaded to the physical board from this session.
+Version **1.1.3** identifies the selected KC868-Ax build in the WebGUI and
+favicon, warns when a non-A6 alias still uses the A6 baseline pin map, and
+reports remaining OTA application capacity plus per-core CPU load where
+supported. These aliases are build baselines, not validated electrical
+profiles for the other boards.
 The [release workflow](./.github/workflows/release.yml) builds both profiles
 on branch pushes, pull requests and manual runs. Pushing a matching `v*` tag
 builds firmware and LittleFS, runs tests and publishes both profile archives
@@ -77,6 +84,10 @@ by KinCony KCS ESP32 documentation: `kc868-a4`, `kc868-a8`, `kc868-a8s`,
 These profiles currently reuse the A6 firmware layout and are intended for
 build-time baseline compatibility work, not validated pinout-equivalent runtime
 support on those boards.
+The WebGUI model badge/title/favicon follow the selected build; diagnostics
+warns that non-A6 aliases still display the A6 GPIO map. The header now shows
+the remaining OTA app-partition capacity and, where FreeRTOS runtime counters
+are enabled, CPU load by core. See [build and profile limits](./docs/build.md).
 
 Before uploading, disconnect unsafe loads, confirm the board and port,
 and read the [deployment instructions](./docs/build.md).

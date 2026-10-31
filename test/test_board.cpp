@@ -186,6 +186,8 @@ void testDiagnosticJson() {
     serializeJson(document, json);
     assert(json.size() < web::boardJsonCapacity);
     assert(document.memoryUsage() < web::boardJsonCapacity);
+    assert(document["board"] == "KC868-A6");
+    assert(document["pinoutValidated"].as<bool>());
     document.clear();
     options.nfc = board::NfcTransport::I2c;
     assert(web::writeBoardStatus(document.to<JsonObject>(), DeviceSettings{}, options,

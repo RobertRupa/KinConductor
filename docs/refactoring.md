@@ -31,7 +31,7 @@ The larger 50-task expansion plan remains incomplete.
 
 [Documentation index](./README.md) · [Project README](../README.md)
 
-[REFACTOR_TODO.md](../REFACTOR_TODO.md) contains the Polish implementation
+[REFACTOR_TODO.md](../REFACTOR_TODO.md) contains the implementation
 specification and staged checklist for LLM agents: peripheral interfaces,
 capability-driven IFTTT and UI, OLED drivers, new devices and transports,
 relay RAM/NVS startup policies, migrations, board diagnostics and acceptance

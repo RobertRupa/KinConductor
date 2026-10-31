@@ -1259,9 +1259,37 @@ Lokalne testy i synthetic browser PASS; zdalny push/Actions nadal niewykonane.
     I2C relays/IFTTT działają podczas audio, pamięć zmierzona.
 
 - [ ] **CC-01 — Dodać CC1101 i katalog wybranych protokołów.** Depends: HW-01, BOARD-01, COMM-01, WEB-01.
-  - SPI owner/CS/GDO, encoder/decoder profiles i legal config validation.
-  - Done: RX/TX do własnego testowego urządzenia, framing/history/overflow,
-    brak kolizji LoRa/PN532 i brak deklaracji rolling-code support bez implementacji.
+  - Verify whether CC1101 can use the RF connector and signal path intended for
+    RF24 on the selected PCB revision. Confirm connector pinout, logic levels,
+    SPI/CS/GDO routing, antenna/band compatibility, and exclusive ownership;
+    an RF24-compatible connector must not be assumed to make the radio a
+    drop-in replacement or permit concurrent use of shared resources.
+  - Provide bounded packet monitoring and history, with explicit selection,
+    naming, save/delete and persistence of user-selected supported frames.
+    Publish received supported packets as discrete capability events so they
+    can later be selected as IFTTT triggers. Expose transmit actions only for
+    explicitly supported, authorized protocols and devices; replay of saved
+    fixed-code frames must be clearly distinguished from secure rolling-code
+    operation.
+  - Support rolling-code pairing only through a verified, manufacturer-defined
+    enrollment procedure that preserves the protocol's security. Do not clone,
+    replay, predict or bypass rolling codes; if secure enrollment is not
+    implemented for a protocol, report it as unsupported and never present a
+    captured frame as a usable paired command. Protect any enrollment secrets
+    from UI/API exports and logs, and require an appropriate storage design
+    before enabling such a protocol.
+  - Add an optional repeater role only for a specifically supported,
+    security-preserving protocol and after hardware/regulatory validation.
+    Repeater mode is mutually exclusive with the monitor, packet-history,
+    normal TX/RX, pairing and IFTTT roles for that radio; switching roles must
+    be explicit and report which capabilities become unavailable. No generic
+    capture-and-retransmit repeater for rolling-code or access-control signals.
+  - Done: test with an authorized device for the supported monitor/save/event
+    and transmit path, bounded framing/history/overflow and resource conflicts
+    with LoRa/PN532; verify exclusive repeater-role behavior and its supported
+    protocol end-to-end. Demonstrate secure rolling-code enrollment only if
+    the selected vendor protocol and implementation support it; otherwise
+    verify that pairing/replay is rejected and reported unsupported.
 
 - [ ] **IR-01 — Dodać IR TX/RX pilotów.** Depends: HW-01, BOARD-01, CORE-02, WEB-01.
   - RMT, LED driver/receiver, decoder whitelist, repeats i learned frames.
@@ -1541,6 +1569,17 @@ przeniesione jako ADC S3; DA-1/DA-2 wymagają zewnętrznego DAC i dopasowania do
 toru płytki. Sprawdzić również piny flash/PSRAM, boot straps, poziomy,
 programowanie, antenę, regulatory i wszystkie przekaźniki przy starcie.
 Nie podawać instrukcji wymiany modułu bez schematu adaptera i weryfikacji.
+
+### KC868-Ax profile acceptance
+
+The PlatformIO aliases `kc868-a4`, `kc868-a8`, `kc868-a8s`, `kc868-a16`,
+`kc868-a32`, `kc868-a64` and `kc868-a128` currently compile the A6 baseline
+with a model label; they do not have model-specific GPIO/IO mappings.
+Diagnostics marks those aliases as pinout-unvalidated. Before treating any
+alias as a supported board profile, obtain the exact PCB revision schematic,
+define its relay/input/ADC/UART/I2C/SPI/DAC roles and reservations, then add a
+profile-specific resource validator and tests against the schematic. The
+manufacturer KCS model list alone is not electrical pinout evidence.
 
 PSRAM przeznaczać na historię, duże modele/JSON i bufory zgodne z driverem.
 Nie zakładać, że każdy stos, DMA, ISR i struktura Wi-Fi może znajdować się
