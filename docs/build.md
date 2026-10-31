@@ -214,6 +214,24 @@ scanner to omit BusIO headers; separate upload commands succeeded without
 installing new packages. The installed WebGUI is served by the board, not
 the earlier static/synthetic preview.
 
+## Additional base KC868-Ax build aliases
+
+For baseline compilation with the same ESP32-WROOM family described in KinCony
+KCS ESP32 documentation, [platformio.ini](../platformio.ini) now includes:
+
+- `kc868-a4`
+- `kc868-a8`
+- `kc868-a8s`
+- `kc868-a16`
+- `kc868-a32`
+- `kc868-a64`
+- `kc868-a128`
+
+These aliases currently extend the same base firmware layout as A6 and add a
+model identifier macro for packaging/diagnostics workflows. They are **not**
+proof of full board-level pinout/peripheral compatibility; validate each board
+against its schematic/resources before deployment.
+
 Each completed refactor slice ends with updating README, the implementation
 checklist and affected project metadata/manifests. Change dependencies,
 build flags, partition layout or release version only when the slice actually

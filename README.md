@@ -71,6 +71,13 @@ GPIO16/17 for diagnostics; P17 routing and Zigbee/Thread/custom bridge
 protocols are not implemented. Existing NVS settings take precedence over
 profile defaults.
 
+Additional **base ESP32-WROOM aliases** are available for KC868-A models listed
+by KinCony KCS ESP32 documentation: `kc868-a4`, `kc868-a8`, `kc868-a8s`,
+`kc868-a16`, `kc868-a32`, `kc868-a64`, `kc868-a128`.
+These profiles currently reuse the A6 firmware layout and are intended for
+build-time baseline compatibility work, not validated pinout-equivalent runtime
+support on those boards.
+
 Before uploading, disconnect unsafe loads, confirm the board and port,
 and read the [deployment instructions](./docs/build.md).
 Both firmware and LittleFS assets are required for the current WebGUI.

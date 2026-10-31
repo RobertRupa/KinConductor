@@ -42,3 +42,25 @@ configuration, binary-image or electrical compatibility.
 - P17 GPIO12/13 can be routed to an existing hardware UART, not a fourth UART.
   GPIO12 is a strapping pin and GPIO13 is currently PN532 SPI CS. Coprocessor
   role selection must respect these conflicts.
+
+## KC868-Ax models listed with ESP32 KCS documentation
+
+The manufacturer KCS ESP32 pages list KC868 models including:
+
+- KC868-A4
+- KC868-A6
+- KC868-A8
+- KC868-A8S
+- KC868-A16
+- KC868-A32
+- KC868-A64
+- KC868-A128
+
+Source pages:
+
+- [KCS firmware for ESP32 boards](https://www.kincony.com/kcs-firmware-esp32-board.html)
+- [KCS v2 firmware](https://www.kincony.com/esp32-kcsv2-firmware.html)
+
+These pages also distinguish ESP32-WROOM-32E/32UE vs ESP32-S3 targets in the
+flashing tool. Treat model-family inclusion as firmware-family compatibility
+context, not a guarantee that one pin map or one image is safe for all boards.

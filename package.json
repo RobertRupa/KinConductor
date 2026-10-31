@@ -10,6 +10,7 @@
   "scripts": {
     "build": "pio run -e kc868-a6-coprocessor",
     "build:a6": "pio run -e kc868-a6",
+    "build:ax-base": "pio run -e kc868-a4 -e kc868-a8 -e kc868-a8s -e kc868-a16 -e kc868-a32 -e kc868-a64 -e kc868-a128",
     "build:matrix": "pio run -e kc868-a6 -e kc868-a6-coprocessor",
     "build:fs": "pio run -e kc868-a6 -t buildfs",
     "test": "npm run test:native && npm run test:web",
