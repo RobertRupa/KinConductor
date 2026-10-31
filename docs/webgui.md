@@ -1,6 +1,7 @@
 # WebGUI: pages, configuration and installation
 
-[Wiki index](./README.md) · [First start](./first-start.md) ·
+[Wiki index](./README.md) · [Setup](./setup.md) · [Settings reference](./settings-reference.md) ·
+[API reference](./api-reference.md) · [First start](./first-start.md) ·
 [Build and flashing](./build.md) · [Pinout and wiring](./hardware.md)
 
 ## Live screenshots from a working device
@@ -153,3 +154,37 @@ IP address from the serial log or the mDNS hostname. On a regular network the
 device requires Basic Auth. HTTP does not encrypt traffic: use only a trusted
 local network and do not expose the port to the internet. See
 [First start](./first-start.md) for details.
+
+## Practical page-by-page configuration workflow
+
+The pages are tabs in one UI; the firmware persists settings in NVS and
+renders live properties from its capability registry. For a first deployment:
+
+1. **Dashboard / Diagnostics:** identify the connected build, board profile,
+   IP, free heap, OTA free space and detected devices; check the relay state
+   and resource conflicts before connecting a load.
+2. **Sensors:** select GPIO32 and GPIO33 types (OFF/DS18B20/DHT22/DHT11),
+   enable only physically present I²C sensors, and leave A1–A4 calibration
+   OFF until measured reference points are available.
+3. **Interfaces:** configure I²C clock, UART1 mode/baud, UART2 RS-485 baud,
+   OLED mode, BLE scanning, shared UDP port and GPIO25/26 output allocations.
+   UART1 modes are exclusive; profile flags are not an implemented bridge.
+4. **IO:** inspect each property’s quality and action parameter bounds in
+   the capability-driven cards. Test only safe loads. Text send actions
+   accept up to 256 UTF-8 bytes; multiline text is LF-normalized.
+5. **IFTTT:** create one rule (maximum four), inspect comparison/threshold
+   and the action, then confirm it triggers only as intended. Independent
+   UDP-trigger rules bind their own local ports and must not collide with the
+   shared listener. `Changed` is appropriate for packet counters.
+6. **Screen:** configure a 1–8 page / up-to-16-widget interface grid, bind
+   valid property IDs with zero-based positions, then set **Interfaces →
+   OLED → Interface grid** (`displayMode=5`).
+7. **Settings:** use schema-grouped accordions for the 33 flat firmware
+   parameters. Hostname lives in the separate Network section; changing it
+   reconnects Wi-Fi. Do not expect a setting to compile missing radio code.
+
+For every setting's **ID, default, range, enum and side effects**, see
+[Settings reference](./settings-reference.md). For request payload shapes,
+responses and HTTP errors see [HTTP API reference](./api-reference.md).
+The firmware schema endpoints are authoritative if the deployed device
+version differs from this documentation.

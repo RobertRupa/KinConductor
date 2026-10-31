@@ -97,3 +97,16 @@ English unless another language is explicitly requested.
   live screenshots are historical and may not match the repository's newer
   1.1.2 assets; flash firmware and matching LittleFS before using them as
   current UI acceptance references.
+
+## Documentation map for new maintainers
+
+- [Setup](./setup.md) is the reproducible host prerequisites / PlatformIO
+  installation / initial build / two-step upload guide.
+- [Profiles](./profiles.md) separates maintained A6 builds from unvalidated
+  KC868-Ax aliases and conditional compilation.
+- [Settings](./settings-reference.md) records the 33 field names/defaults/ranges
+  from `src/config/device_settings.cpp`; compare against runtime schema.
+- [API](./api-reference.md) enumerates routes from `src/wifi_web_ui.cpp` and
+  JSON contracts; [Troubleshooting](./troubleshooting.md) maps common failures.
+- These Markdown pages are a **repository-local wiki** under `docs/`.
+  The separate GitHub-hosted Wiki is not automatically synchronized.

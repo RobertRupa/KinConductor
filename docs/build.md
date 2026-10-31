@@ -2,8 +2,11 @@
 
 [Documentation index](./README.md) · [Project README](../README.md)
 
-PlatformIO firmware for the KinCony KC868-A6 based on ESP32-WROOM-32. Build
-and upload with PlatformIO:
+PlatformIO firmware for the KinCony KC868-A6 based on ESP32-WROOM-32.
+For complete prerequisites, pinned PlatformIO installation, serial permissions,
+VS Code setup and a clean checkout see [Requirements and first build](./setup.md).
+For build variants and unsupported Ax alias caveats see [Profiles](./profiles.md).
+Build and upload with PlatformIO:
 
 ```sh
 pio run

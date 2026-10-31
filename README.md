@@ -16,7 +16,12 @@ documentation. Start with the [documentation index](./docs/README.md).
 
 | Chapter | Contents |
 | --- | --- |
+| [Getting started](./docs/setup.md) | Requirements, Ubuntu/VS Code installation, first build and serial upload |
 | [Build and upload](./docs/build.md) | PlatformIO profiles, tests, firmware and LittleFS deployment |
+| [Build profiles](./docs/profiles.md) | Supported A6 environments, experimental flags and Ax alias limitations |
+| [Settings and parameters](./docs/settings-reference.md) | All 33 firmware settings, defaults/ranges and separate persistent records |
+| [HTTP API](./docs/api-reference.md) | Routes, authentication, JSON contracts and error codes |
+| [Troubleshooting](./docs/troubleshooting.md) | Build, flash, Wi-Fi, WebGUI and peripheral diagnostics |
 | [First start](./docs/first-start.md) | Wi-Fi provisioning, mDNS, web login and access precautions |
 | [WebGUI guide and screenshots](./docs/webgui.md) | Live page screenshots, configuration guide and firmware/LittleFS flashing |
 | [Hardware](./docs/hardware.md) | GPIO pinout, buses, wiring, conflicts and manufacturer sources |
@@ -68,10 +73,17 @@ Actions run have not been performed from this environment.
 
 ## Quick start
 
+Install pinned PlatformIO Core, clone this repository and build the standard A6:
+
 ```sh
-pio run -e kc868-a6-coprocessor
-npm test
+pio run -e kc868-a6
+pio run -e kc868-a6 -t buildfs
+PIO_ENV=kc868-a6 npm test
 ```
+
+For a fresh Ubuntu/VS Code setup, follow [Getting started](./docs/setup.md).
+No `npm install` is needed. Compile the firmware once before running native
+tests so the pinned ArduinoJson dependency is present.
 
 The default profile is `kc868-a6-coprocessor`. It currently uses UART1 on
 GPIO16/17 for diagnostics; P17 routing and Zigbee/Thread/custom bridge

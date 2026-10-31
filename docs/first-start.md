@@ -56,3 +56,13 @@ The header reports chip model, core count and configured MHz, free/total heap,
 PSRAM availability and physical flash/application size. Newer firmware may
 also report remaining OTA application space and per-core CPU utilization.
 MHz is not CPU load, and heap capacity is not a claim about all physical SRAM.
+
+## Next configuration steps
+
+After initial Wi-Fi setup, open **Diagnostics** first and verify the board
+identity, pin map and resource conflicts. Configure **Sensors** and
+**Interfaces** before using physical actions, then inspect **IO** and
+add IFTTT rules cautiously. Use [WebGUI walkthrough](./webgui.md),
+[Settings and parameter ranges](./settings-reference.md) and the
+[HTTP API reference](./api-reference.md). If the UI is missing or the API
+returns HTML, see [Troubleshooting](./troubleshooting.md); do not erase NVS.
