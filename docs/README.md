@@ -4,7 +4,10 @@
 
 This repository-local Markdown wiki is maintained alongside the firmware.
 English is the default language for repository documentation. No
-documentation build or external service is required.
+documentation build or external service is required for local Markdown. The
+[native GitHub Wiki](https://github.com/RobertRupa/KinConductor/wiki) is a
+**separate Git repository** and must be published explicitly using the
+[Wiki sync guide](./wiki-sync.md).
 
 ## Chapters
 
@@ -29,6 +32,7 @@ documentation build or external service is required.
 15. [Tagged release images and CI](./releases.md)
 16. [LLM project memory and instructions](./llm-memory.md)
 17. [Completed refactoring work](../TODO_REFACTORED.md)
+18. [Publish the native GitHub Wiki](./wiki-sync.md)
 
 The chapters describe current behavior; the implementation plan also describes
 future work. A build flag or resource reservation is not evidence that a
