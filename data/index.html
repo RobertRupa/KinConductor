@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183c32">
+  <title>KC868-A6 | Panel</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="KC868-A6">
+      <span class="brand-mark" aria-hidden="true">A6</span>
+      <span><strong>KC868-A6</strong><small data-i18n="controller">sterownik</small></span>
+    </a>
+    <div class="top-actions">
+      <span class="connection"><i id="connectionDot"></i><span id="connectionText" data-i18n="connecting">łączenie</span></span>
+      <select id="language" aria-label="Language">
+        <option value="pl">PL</option>
+        <option value="en">EN</option>
+      </select>
+      <button class="icon-button" id="wifiButton" type="button" title="Wi-Fi" aria-label="Wi-Fi settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 20 0M5.5 12.3a10 10 0 0 1 13 0M9 15.8a5 5 0 0 1 6 0M12 19h.01"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <nav class="page-tabs" role="tablist" aria-label="Device pages">
+      <button class="page-tab is-active" type="button" role="tab" aria-selected="true" data-page="overview" data-i18n="pageOverview">Przegląd</button>
+      <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="sensors" data-i18n="pageSensors">Czujniki</button>
+      <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="interfaces" data-i18n="pageInterfaces">Interfejsy</button>
+      <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="diagnostics" data-i18n="pageDiagnostics">Diagnostyka</button>
+      <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="automation" data-i18n="pageAutomation">IFTTT</button>
+    </nav>
+
+    <div class="page-view is-active" id="overviewPage" role="tabpanel">
+    <section class="intro">
+      <div>
+        <p class="eyebrow" data-i18n="overview">CENTRUM STEROWANIA</p>
+        <h1 data-i18n="dashboard">Panel urządzenia</h1>
+        <p class="subhead"><span id="networkName">--</span><span class="separator">/</span><span id="networkIp">--</span></p>
+      </div>
+      <div class="updated"><span class="live-mark"></span><span data-i18n="live">Dane na żywo</span><span id="lastUpdate">--:--:--</span></div>
+    </section>
+
+    <section class="summary-grid" aria-label="Summary">
+      <article class="summary-item summary-relays">
+        <span class="summary-label" data-i18n="activeRelays">AKTYWNE PRZEKAŹNIKI</span>
+        <div class="summary-value"><strong id="relayCount">0</strong><span>/ 6</span></div>
+        <div class="summary-track"><span id="relayTrack"></span></div>
+      </article>
+      <article class="summary-item">
+        <span class="summary-label" data-i18n="temperature">TEMPERATURA</span>
+        <div class="summary-value"><strong id="mainTemperature">--</strong><span>°C</span></div>
+        <span class="summary-note" data-i18n="sensorOne">czujnik 1</span>
+      </article>
+      <article class="summary-item">
+        <span class="summary-label" data-i18n="airQuality">JAKOŚĆ POWIETRZA</span>
+        <div class="summary-value"><strong id="aqiValue">--</strong><span id="aqiLabel" data-i18n="waiting">oczekiwanie</span></div>
+        <span class="summary-note"><span id="tvocValue">--</span> ppb TVOC <span class="note-separator">·</span> eCO₂ <span id="eco2Value">--</span></span>
+      </article>
+      <article class="summary-item">
+        <span class="summary-label" data-i18n="wifiSignal">SYGNAŁ WI-FI</span>
+        <div class="summary-value"><strong id="wifiRssi">--</strong><span>dBm</span></div>
+        <span class="summary-note" id="wifiMode" data-i18n="stationMode">tryb sieciowy</span>
+      </article>
+    </section>
+
+    <div class="dashboard-grid">
+      <div class="dashboard-main-grid">
+      <section class="panel relay-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow" data-i18n="outputs">WYJŚCIA</p><h2 data-i18n="relays">Przekaźniki</h2></div>
+          <span class="panel-count">06 <span data-i18n="channels">KANAŁÓW</span></span>
+        </div>
+        <div class="relay-grid" id="relayGrid">
+          <article class="relay-row" data-relay="1"><div class="relay-index">01</div><div class="relay-name"><strong data-i18n="relay">Przekaźnik</strong><small data-i18n="channelOne">Kanał 1</small></div><span class="relay-state" data-state></span><button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Relay 1"><span></span></button></article>
+          <article class="relay-row" data-relay="2"><div class="relay-index">02</div><div class="relay-name"><strong data-i18n="relay">Przekaźnik</strong><small data-i18n="channelTwo">Kanał 2</small></div><span class="relay-state" data-state></span><button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Relay 2"><span></span></button></article>
+          <article class="relay-row" data-relay="3"><div class="relay-index">03</div><div class="relay-name"><strong data-i18n="relay">Przekaźnik</strong><small data-i18n="channelThree">Kanał 3</small></div><span class="relay-state" data-state></span><button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Relay 3"><span></span></button></article>
+          <article class="relay-row" data-relay="4"><div class="relay-index">04</div><div class="relay-name"><strong data-i18n="relay">Przekaźnik</strong><small data-i18n="channelFour">Kanał 4</small></div><span class="relay-state" data-state></span><button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Relay 4"><span></span></button></article>
+          <article class="relay-row" data-relay="5"><div class="relay-index">05</div><div class="relay-name"><strong data-i18n="relay">Przekaźnik</strong><small data-i18n="channelFive">Kanał 5</small></div><span class="relay-state" data-state></span><button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Relay 5"><span></span></button></article>
+          <article class="relay-row" data-relay="6"><div class="relay-index">06</div><div class="relay-name"><strong data-i18n="relay">Przekaźnik</strong><small data-i18n="channelSix">Kanał 6</small></div><span class="relay-state" data-state></span><button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Relay 6"><span></span></button></article>
+        </div>
+      </section>
+
+      <section class="panel input-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow" data-i18n="inputs">WEJŚCIA</p><h2 data-i18n="digitalInputs">Wejścia cyfrowe</h2></div>
+          <span class="panel-count">08 <span data-i18n="channels">KANAŁÓW</span></span>
+        </div>
+        <div class="input-grid" id="inputGrid">
+          <div class="input-cell" data-input="1"><span>DI 01</span><i></i><strong>--</strong></div>
+          <div class="input-cell" data-input="2"><span>DI 02</span><i></i><strong>--</strong></div>
+          <div class="input-cell" data-input="3"><span>DI 03</span><i></i><strong>--</strong></div>
+          <div class="input-cell" data-input="4"><span>DI 04</span><i></i><strong>--</strong></div>
+          <div class="input-cell" data-input="5"><span>DI 05</span><i></i><strong>--</strong></div>
+          <div class="input-cell" data-input="6"><span>DI 06</span><i></i><strong>--</strong></div>
+          <div class="input-cell" data-input="7"><span>DI 07</span><i></i><strong>--</strong></div>
+          <div class="input-cell" data-input="8"><span>DI 08</span><i></i><strong>--</strong></div>
+        </div>
+        <div class="button-input-line"><span>S2 · GPIO0</span><strong id="s2DashboardState">--</strong></div>
+        <div class="panel-footnote"><span class="legend-dot"></span><span data-i18n="triggered">aktywne wejście</span><span class="legend-dot muted"></span><span data-i18n="idle">spoczynek</span></div>
+      </section>
+
+      <section class="panel analog-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow" data-i18n="measurement">POMIAR</p><h2 data-i18n="analogInputs">Wejścia analogowe</h2></div>
+          <span class="panel-count" data-i18n="rawAdc">ADC / RAW</span>
+        </div>
+        <div class="analog-list" id="analogList">
+          <div class="analog-row" data-analog="0"><span>A1</span><div class="meter"><i></i></div><strong>--</strong></div>
+          <div class="analog-row" data-analog="1"><span>A2</span><div class="meter"><i></i></div><strong>--</strong></div>
+          <div class="analog-row" data-analog="2"><span>A3</span><div class="meter"><i></i></div><strong>--</strong></div>
+          <div class="analog-row" data-analog="3"><span>A4</span><div class="meter"><i></i></div><strong>--</strong></div>
+        </div>
+      </section>
+
+      <section class="panel sensor-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow" data-i18n="environment">ŚRODOWISKO</p><h2 data-i18n="sensors">Czujniki</h2></div>
+          <span class="sensor-status"><i></i><span data-i18n="autoRefresh">ODŚWIEŻANIE 1 S</span></span>
+        </div>
+        <div class="sensor-grid">
+          <div class="sensor-reading"><span data-i18n="temperatureOne">Temperatura 1</span><strong id="temperatureOne">--<small>°C</small></strong></div>
+          <div class="sensor-reading"><span data-i18n="temperatureTwo">Temperatura 2</span><strong id="temperatureTwo">--<small>°C</small></strong></div>
+          <div class="sensor-reading"><span data-i18n="humidity">Wilgotność</span><strong id="humidityValue">--<small>%</small></strong></div>
+          <div class="sensor-reading"><span data-i18n="gasResistance">Opór gazu</span><strong id="gasValue">--<small>Ω</small></strong></div>
+          <div class="sensor-reading location-reading"><span data-i18n="location">Lokalizacja GPS</span><strong id="locationValue">--</strong><small id="satelliteValue">--</small></div>
+          <div class="sensor-reading compass-reading"><span data-i18n="compass">Kompas · XYZ</span><strong id="compassValue">--</strong></div>
+        </div>
+      </section>
+      </div>
+      <aside class="panel event-log-panel" aria-live="polite">
+        <div class="panel-heading"><div><p class="eyebrow" data-i18n="eventStream">ZDARZENIA</p><h2 data-i18n="liveLog">Strumień logów</h2></div><span class="panel-count" id="eventLogCount">0</span></div>
+        <div class="event-log-list" id="eventLogList"></div>
+      </aside>
+    </div>
+    <footer><span>KC868-A6</span><span data-i18n="localOnly">Panel lokalny · odświeżanie automatyczne</span></footer>
+    </div>
+
+    <section class="page-view" id="sensorsPage" role="tabpanel" hidden>
+      <div class="view-heading">
+        <div><p class="eyebrow" data-i18n="sensorSection">KONFIGURACJA</p><h1 data-i18n="sensorPageTitle">Czujniki</h1></div>
+        <p data-i18n="sensorPageDescription">Podgląd pomiarów i aktywacja kanałów pomiarowych.</p>
+      </div>
+      <div class="settings-layout">
+        <form class="panel settings-panel" id="sensorSettingsForm">
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="sampling">ODCZYT</p><h2 data-i18n="sensorSettings">Ustawienia sensorów</h2></div></div>
+          <label class="field-label" for="sensorInterval" data-i18n="samplingInterval">Interwał próbkowania</label>
+          <select id="sensorInterval" name="sensorIntervalMs">
+            <option value="1000">1 s</option><option value="2000">2 s</option>
+            <option value="5000">5 s</option><option value="10000">10 s</option>
+          </select>
+          <div class="setting-list">
+            <label class="field-label" for="gpio32SensorType">GPIO32 · <span data-i18n="sensorPortOne">port czujnika 1</span></label>
+            <select id="gpio32SensorType" name="gpio32SensorType"><option value="0" data-i18n="sensorOff">Wyłączony</option><option value="1">DS18B20</option><option value="2">DHT22</option></select>
+            <label class="field-label" for="gpio33SensorType">GPIO33 · <span data-i18n="sensorPortTwo">port czujnika 2</span></label>
+            <select id="gpio33SensorType" name="gpio33SensorType"><option value="0" data-i18n="sensorOff">Wyłączony</option><option value="1">DS18B20</option><option value="2">DHT22</option></select>
+            <label class="setting-row" data-peripheral-row="bme680"><span><strong>BME680</strong><small data-i18n="bmeDescription">Temperatura, wilgotność, gaz</small><small class="peripheral-note" data-peripheral-note="bme680" hidden></small></span><input type="checkbox" name="bme680Enabled" data-peripheral-enable="bme680"><i></i></label>
+            <label class="setting-row" data-peripheral-row="ens160"><span><strong>ENS160</strong><small data-i18n="ensDescription">AQI, TVOC, eCO₂</small><small class="peripheral-note" data-peripheral-note="ens160" hidden></small></span><input type="checkbox" name="ens160Enabled" data-peripheral-enable="ens160"><i></i></label>
+            <label class="setting-row" data-peripheral-row="compass"><span><strong>QMC5883L</strong><small data-i18n="compass">Kompas · XYZ</small><small class="peripheral-note" data-peripheral-note="compass" hidden></small></span><input type="checkbox" name="compassEnabled" data-peripheral-enable="compass"><i></i></label>
+            <label class="setting-row"><span><strong>GPS</strong><small data-i18n="gpsDescription">UART1 · lokalizacja</small></span><input type="checkbox" name="gpsEnabled"><i></i></label>
+            <label class="setting-row" data-peripheral-row="rtc"><span><strong>DS3231</strong><small data-i18n="rtcDescription">Zegar czasu rzeczywistego</small><small class="peripheral-note" data-peripheral-note="rtc" hidden></small></span><input type="checkbox" name="rtcEnabled" data-peripheral-enable="rtc"><i></i></label>
+            <label class="setting-row" data-peripheral-row="pn532"><span><strong>PN532</strong><small data-i18n="nfcDescription">Czytnik NFC · SPI</small><small class="peripheral-note" data-peripheral-note="pn532" hidden></small></span><input type="checkbox" name="pn532Enabled" data-peripheral-enable="pn532"><i></i></label>
+          </div>
+          <button class="primary-button" type="submit" data-i18n="saveSettings">Zapisz ustawienia</button>
+          <p class="form-message" id="sensorSettingsMessage" role="status"></p>
+        </form>
+        <section class="panel sensor-preview-panel">
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="liveValues">TELEMETRIA</p><h2 data-i18n="sensorPreview">Podgląd sensorów</h2></div><span class="sensor-status"><i></i><span data-i18n="autoRefresh">ODŚWIEŻANIE 1 S</span></span></div>
+          <div class="preview-grid">
+            <article class="preview-tile"><span data-i18n="temperatureOne">Temperatura 1</span><strong id="sensorTemp1">--</strong><small id="sensorTemp1Name">GPIO32</small></article>
+            <article class="preview-tile"><span data-i18n="temperatureTwo">Temperatura 2</span><strong id="sensorTemp2">--</strong><small id="sensorTemp2Name">GPIO33</small></article>
+            <article class="preview-tile"><span>BME680</span><strong id="sensorBmeTemp">--</strong><small id="sensorBmeHumidity">--</small></article>
+            <article class="preview-tile"><span>ENS160 · AQI</span><strong id="sensorAqi">--</strong><small id="sensorVoc">--</small></article>
+            <article class="preview-tile"><span data-i18n="location">Lokalizacja GPS</span><strong id="sensorGps">--</strong><small id="sensorGpsSatellites">--</small></article>
+            <article class="preview-tile"><span data-i18n="compass">Kompas · XYZ</span><strong id="sensorCompass">--</strong><small>QMC5883L</small></article>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="page-view" id="interfacesPage" role="tabpanel" hidden>
+      <div class="view-heading">
+        <div><p class="eyebrow" data-i18n="interfaceSection">MAGISTRALY I URZĄDZENIA</p><h1 data-i18n="interfacePageTitle">Interfejsy</h1></div>
+        <p data-i18n="interfacePageDescription">Stan magistral, konfiguracja portów i wykryte peryferia.</p>
+      </div>
+      <div class="interface-layout">
+        <form class="panel settings-panel" id="interfaceSettingsForm">
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="portConfig">PORTY</p><h2 data-i18n="interfaceSettings">Konfiguracja interfejsów</h2></div></div>
+          <div class="settings-subhead"><span data-i18n="oledConfig">EKRAN OLED</span></div>
+          <label class="setting-row" data-peripheral-row="oled"><span><strong data-i18n="oledEnabled">Włącz ekran</strong><small>SSD1306 · I²C 0x3C · SDA4/SCL15</small><small class="peripheral-note" data-peripheral-note="oled" hidden></small></span><input type="checkbox" name="displayEnabled" data-peripheral-enable="oled"><i></i></label>
+          <label class="field-label" for="displayMode" data-i18n="oledPageMode">Strony ekranu</label>
+          <select id="displayMode" name="displayMode"><option value="0" data-i18n="oledCycle">Automatyczny cykl</option><option value="1" data-i18n="oledStatus">Status urządzenia</option><option value="2" data-i18n="oledSensors">Sensory</option><option value="3" data-i18n="oledAir">Jakość powietrza</option><option value="4" data-i18n="oledGrid">Siatka danych</option></select>
+          <label class="field-label" for="displayPageSeconds" data-i18n="oledPageTime">Czas strony</label>
+          <select id="displayPageSeconds" name="displayPageSeconds"><option value="2">2 s</option><option value="5">5 s</option><option value="10">10 s</option><option value="20">20 s</option></select>
+          <label class="field-label" for="displayBrightness" data-i18n="oledBrightness">Jasność / kontrast</label>
+          <input class="range-input" id="displayBrightness" name="displayBrightness" type="range" min="0" max="255" step="1" value="160">
+          <label class="field-label" for="displayRotation" data-i18n="oledRotation">Orientacja</label>
+          <select id="displayRotation" name="displayRotation"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select>
+          <label class="field-label" for="displayTextSize" data-i18n="oledFontSize">Skala fontu OLED</label>
+          <select id="displayTextSize" name="displayTextSize"><option value="1" data-i18n="oledFontNormal">1× · normalny</option><option value="2" data-i18n="oledFontLarge">2× · duży</option></select>
+          <div class="settings-subhead"><span data-i18n="oledGridFields">POLA SIATKI OLED</span></div>
+          <label class="setting-row"><span><strong data-i18n="oledGridTemp1">Temperatura GPIO32</strong></span><input type="checkbox" name="oledFieldTemp1"><i></i></label>
+          <label class="setting-row"><span><strong data-i18n="oledGridTemp2">Temperatura GPIO33</strong></span><input type="checkbox" name="oledFieldTemp2"><i></i></label>
+          <label class="setting-row"><span><strong data-i18n="oledGridHumidity">Wilgotność</strong></span><input type="checkbox" name="oledFieldHumidity"><i></i></label>
+          <label class="setting-row"><span><strong data-i18n="oledGridAqi">AQI / eCO₂</strong></span><input type="checkbox" name="oledFieldAir"><i></i></label>
+          <label class="setting-row"><span><strong data-i18n="oledGridRelays">Przekaźniki</strong></span><input type="checkbox" name="oledFieldRelays"><i></i></label>
+          <label class="setting-row"><span><strong data-i18n="oledGridInputs">Wejścia DI</strong></span><input type="checkbox" name="oledFieldInputs"><i></i></label>
+          <div class="settings-subhead"><span data-i18n="bluetoothConfig">BLUETOOTH LE</span></div>
+          <label class="field-label" for="bluetoothMode" data-i18n="bluetoothMode">Tryb Bluetooth</label>
+          <select id="bluetoothMode" name="bluetoothMode"><option value="0" data-i18n="bluetoothOff">Wyłączony</option><option value="1" data-i18n="bluetoothScan">Skanowanie BLE</option><option value="2" data-i18n="bluetoothBeacon">Beacon KC868-A6</option></select>
+          <div class="test-row"><button class="secondary-button" id="bluetoothScanButton" type="button" data-i18n="scanBluetooth">Skanuj pobliskie</button><span id="bluetoothScanMessage" role="status"></span></div>
+          <div class="device-list nearby-list" id="bluetoothDeviceList"></div>
+          <p class="settings-warning" data-i18n="bluetoothWarning">BLE scan i beacon są trybami rozłącznymi; skanowanie może chwilowo opóźnić web API.</p>
+          <label class="field-label" for="i2cClock" data-i18n="i2cClock">Częstotliwość I²C</label>
+          <select id="i2cClock" name="i2cClockHz"><option value="100000">100 kHz</option><option value="50000">50 kHz</option></select>
+          <label class="field-label" for="uart1Mode" data-i18n="uart1Mode">UART1 · GPIO16/17</label>
+          <select id="uart1Mode" name="uart1Mode"><option value="0" data-i18n="modeRs232">RS-232</option><option value="1">GPS</option><option value="2" data-i18n="modeCoprocessor">Koprocesor radiowy</option></select>
+          <label class="field-label" for="uart1Baud" data-i18n="uartBaud">Prędkość UART1</label>
+          <select id="uart1Baud" name="uart1Baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select>
+          <label class="field-label" for="rs485Baud" data-i18n="rs485Baud">Prędkość RS-485</label>
+          <select id="rs485Baud" name="rs485Baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select>
+          <div class="settings-subhead"><span data-i18n="beeperConfig">BEEPER · DA-1</span></div>
+          <label class="setting-row"><span><strong data-i18n="enableBeeper">Użyj DA-1 dla beepera</strong><small data-i18n="beeperNote">PWM na DAC1 · wyłącza analogowe DA-1</small></span><input type="checkbox" name="beeperEnabled"><i></i></label>
+          <label class="field-label" for="beeperFrequency" data-i18n="beeperFrequency">Częstotliwość</label>
+          <select id="beeperFrequency" name="beeperFrequencyHz"><option value="500">500 Hz</option><option value="1000">1 kHz</option><option value="2000">2 kHz</option><option value="3000">3 kHz</option><option value="4000">4 kHz</option></select>
+          <label class="field-label" for="beeperDuration" data-i18n="beeperDuration">Czas testu</label>
+          <select id="beeperDuration" name="beeperDurationMs"><option value="100">100 ms</option><option value="250">250 ms</option><option value="500">500 ms</option><option value="1000">1 s</option></select>
+          <div class="test-row"><button class="secondary-button" id="beeperTestButton" type="button" data-i18n="testBeeper">Test beepera</button><span id="beeperTestMessage" role="status"></span></div>
+          <div class="settings-subhead"><span data-i18n="buttonConfig">WEJŚCIE PRZYCISKU</span></div>
+          <label class="setting-row"><span><strong data-i18n="enableS2">Użyj S2 jako wejścia</strong><small data-i18n="s2PinNote">GPIO0 · przytrzymanie przy resecie uruchamia tryb flash</small></span><input type="checkbox" name="s2InputEnabled"><i></i></label>
+          <p class="button-state-note"><span data-i18n="buttonState">Stan S2</span><strong id="s2ButtonState">--</strong></p>
+          <p class="settings-warning" data-i18n="uartWarning">UART1 współdzieli piny z RS-232. Zmiana trybu wymaga odpowiedniego urządzenia i konwertera poziomów.</p>
+          <button class="primary-button" type="submit" data-i18n="saveSettings">Zapisz ustawienia</button>
+          <p class="form-message" id="interfaceSettingsMessage" role="status"></p>
+        </form>
+        <section class="panel devices-panel">
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="discovery">DETEKCJA</p><h2 data-i18n="connectedDevices">Podłączone urządzenia</h2></div><span class="panel-count" id="deviceCount">--</span></div>
+          <div class="i2c-scan-result"><span data-i18n="i2cStartupScan">Adresy I²C wykryte przy starcie</span><strong id="i2cDetectedAddresses">--</strong></div>
+          <div class="device-list" id="deviceList"></div>
+        </section>
+      </div>
+      <section class="panel rf24-monitor-panel">
+        <div class="panel-heading"><div><p class="eyebrow" data-i18n="rf24Monitor">RADIO · MONITOR</p><h2 data-i18n="rf24Captured">Odebrane pakiety RF24</h2></div><span class="panel-count" id="rf24MonitorState">--</span></div>
+        <p class="field-hint" data-i18n="rf24MonitorNote">Monitor odbiera 32-bitowe ramki na kanale 76 i pipe E8E8F0F0E1.</p>
+        <div class="rf24-monitor-grid">
+          <section><h3 data-i18n="rf24History">Historia odbioru</h3><div class="rf24-packet-list" id="rf24HistoryList"></div></section>
+          <form id="rf24SaveForm">
+            <h3 data-i18n="rf24SavePacket">Zapisz ramkę</h3>
+            <label class="field-label" for="rf24CaptureSelect" data-i18n="rf24SelectCaptured">Wybierz odebrany pakiet</label>
+            <select id="rf24CaptureSelect" required></select>
+            <label class="field-label" for="rf24PacketName" data-i18n="rf24PacketName">Nazwa</label>
+            <input id="rf24PacketName" maxlength="32" required>
+            <button class="secondary-button" id="rf24SaveButton" type="submit" data-i18n="rf24Save">Zapisz wybrany</button>
+          </form>
+          <section><h3 data-i18n="rf24SavedPackets">Zapisane pakiety</h3><div class="rf24-packet-list" id="rf24SavedList"></div></section>
+        </div>
+        <p class="form-message" id="rf24Message" role="status"></p>
+      </section>
+    </section>
+
+    <section class="page-view" id="diagnosticsPage" role="tabpanel" hidden>
+      <div class="view-heading">
+        <div><p class="eyebrow" data-i18n="diagnosticsSection">DIAGNOSTYKA</p><h1 data-i18n="pageDiagnostics">Diagnostyka</h1></div>
+        <p data-i18n="diagnosticsDescription">Peryferia wykryte podczas startu i bieżący stan interfejsów.</p>
+      </div>
+      <div class="diagnostic-layout">
+        <section class="panel devices-panel">
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="discovery">DETEKCJA</p><h2 data-i18n="connectedDevices">Podłączone urządzenia</h2></div><span class="panel-count" id="diagnosticDeviceCount">--</span></div>
+          <div class="i2c-scan-result"><span data-i18n="i2cStartupScan">Adresy I²C wykryte przy starcie</span><strong id="diagnosticI2cAddresses">--</strong></div>
+          <div class="device-list" id="diagnosticDeviceList"></div>
+        </section>
+        <section class="panel diagnostics-panel">
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="liveValues">TELEMETRIA</p><h2 data-i18n="runtimeStatus">Stan urządzenia</h2></div></div>
+          <p class="diagnostic-line"><span data-i18n="rf24RadioState">nRF24</span><strong id="diagnosticRf24State">--</strong></p>
+          <p class="diagnostic-line"><span data-i18n="rf24LastPacket">Ostatni pakiet</span><strong id="diagnosticRf24Packet">--</strong></p>
+          <p class="diagnostic-line"><span data-i18n="temperatureOne">Temperatura 1</span><strong id="diagnosticTemperature1">--</strong></p>
+          <p class="diagnostic-line"><span data-i18n="temperatureTwo">Temperatura 2</span><strong id="diagnosticTemperature2">--</strong></p>
+          <p class="diagnostic-line"><span data-i18n="buttonState">Stan S2</span><strong id="diagnosticS2State">--</strong></p>
+          <p class="diagnostic-line"><span data-i18n="beeperConfig">BEEPER · DA-1</span><strong id="diagnosticBeeperState">--</strong></p>
+        </section>
+      </div>
+    </section>
+
+    <section class="page-view" id="automationPage" role="tabpanel" hidden>
+      <div class="view-heading">
+        <div><p class="eyebrow" data-i18n="automationSection">REGUŁY AUTOMATYZACJI</p><h1 data-i18n="automationTitle">IFTTT</h1></div>
+        <p data-i18n="automationDescription">Gdy warunek sensora lub wejścia zostanie spełniony, zmień stan przekaźnika.</p>
+      </div>
+      <div class="settings-layout">
+        <form class="panel settings-panel" id="iftttBuilderForm">
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="newRule">NOWA REGUŁA</p><h2 data-i18n="conditionAction">Warunek → akcja</h2></div></div>
+          <label class="field-label" for="iftttSource" data-i18n="ifSource">Jeśli odczyt</label>
+          <select id="iftttSource">
+            <option value="temperature1" data-i18n="sourceTemp1">Temperatura · GPIO32</option>
+            <option value="temperature2" data-i18n="sourceTemp2">Temperatura · GPIO33</option>
+            <option value="buttonS2" data-i18n="sourceS2">Przycisk S2</option>
+            <option value="rf24Packet" data-i18n="sourceRf24">Odebrany pakiet RF24</option>
+            <option value="bmeTemperature" data-i18n="sourceBmeTemp">Temperatura BME680</option>
+            <option value="humidity" data-i18n="sourceHumidity">Wilgotność BME680</option>
+            <option value="airQuality" data-i18n="sourceAqi">AQI ENS160</option>
+            <option value="digital1">DI 1</option><option value="digital2">DI 2</option><option value="digital3">DI 3</option><option value="digital4">DI 4</option>
+            <option value="digital5">DI 5</option><option value="digital6">DI 6</option><option value="digital7">DI 7</option><option value="digital8">DI 8</option>
+            <option value="analog1">AI 1 · ADC</option><option value="analog2">AI 2 · ADC</option><option value="analog3">AI 3 · ADC</option><option value="analog4">AI 4 · ADC</option>
+          </select>
+          <div class="ifttt-condition-row">
+            <select id="iftttComparison" aria-label="Comparison"><option value=">">&gt;</option><option value="<">&lt;</option><option value=">=">≥</option><option value="<=">≤</option><option value="==">=</option><option value="!=">≠</option></select>
+            <input id="iftttThreshold" type="number" step="any" value="25" aria-label="Threshold">
+          </div>
+          <label class="field-label" for="iftttAction" data-i18n="thenAction">Wtedy wykonaj</label>
+          <select id="iftttAction"><option value="relay" data-i18n="actionRelay">Steruj przekaźnikiem</option><option value="beeper" data-i18n="actionBeeper">Uruchom buzzer</option><option value="rf24Send" data-i18n="actionRf24">Nadaj payload RF24</option><option value="rf24Saved" data-i18n="actionRf24Saved">Odtwórz zapisany RF24</option><option value="oledPage" data-i18n="actionOled">Pokaż stronę OLED</option></select>
+          <div class="ifttt-condition-row" id="relayActionFields">
+            <select id="iftttRelay"><option value="1">Relay 1</option><option value="2">Relay 2</option><option value="3">Relay 3</option><option value="4">Relay 4</option><option value="5">Relay 5</option><option value="6">Relay 6</option></select>
+            <select id="iftttRelayState"><option value="true" data-i18n="turnOn">Włącz</option><option value="false" data-i18n="turnOff">Wyłącz</option></select>
+          </div>
+          <div id="rf24ActionFields" hidden>
+            <label class="field-label" for="iftttRfPayload" data-i18n="rf24Payload">Payload 32-bit (decimal)</label>
+            <input id="iftttRfPayload" type="number" min="0" max="4294967295" step="1" value="0">
+            <small class="field-hint" data-i18n="rf24PipeNote">nRF24 · CH76 · pipe E8E8F0F0E1</small>
+          </div>
+          <div id="rf24SavedActionFields" hidden>
+            <label class="field-label" for="iftttRf24SavedPacket" data-i18n="rf24SelectSaved">Wybierz zapisany pakiet</label>
+            <select id="iftttRf24SavedPacket"></select>
+            <small class="field-hint" data-i18n="rf24PipeNote">nRF24 · CH76 · pipe E8E8F0F0E1</small>
+          </div>
+          <div id="beeperActionFields" hidden>
+            <small class="field-hint" data-i18n="beeperActionHint">Używa częstotliwości i czasu testu z ustawień DA-1.</small>
+          </div>
+          <div id="oledActionFields" hidden>
+            <label class="field-label" for="iftttOledPage" data-i18n="oledPageMode">Strona OLED</label>
+            <select id="iftttOledPage"><option value="1" data-i18n="oledStatus">Status urządzenia</option><option value="2" data-i18n="oledSensors">Sensory</option><option value="3" data-i18n="oledAir">Jakość powietrza</option></select>
+          </div>
+          <button class="secondary-button add-rule-button" id="addIftttRule" type="button" data-i18n="addRule">Dodaj regułę</button>
+          <p class="form-message" id="iftttMessage" role="status"></p>
+        </form>
+        <section class="panel devices-panel">
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="savedRules">ZAPISANE</p><h2 data-i18n="automationRules">Reguły IFTTT</h2></div><span class="panel-count" id="iftttRuleCount">0 / 4</span></div>
+          <div class="ifttt-rule-list" id="iftttRuleList"></div>
+          <button class="primary-button" id="saveIftttRules" type="button" data-i18n="saveRules">Zapisz reguły</button>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="wifiDialog">
+    <form method="dialog" class="dialog-close-form"><button class="close-button" aria-label="Close">×</button></form>
+    <p class="eyebrow" data-i18n="networkSetup">SIEĆ</p>
+    <h2 data-i18n="wifiSetup">Konfiguracja Wi-Fi</h2>
+    <p class="dialog-copy" data-i18n="wifiHelp">Wybierz sieć i zapisz dane połączenia.</p>
+    <div class="scan-row"><label for="networkSelect" data-i18n="availableNetworks">Dostępne sieci</label><button class="text-button" id="scanButton" type="button" data-i18n="scan">Skanuj</button></div>
+    <select id="networkSelect"><option value="" data-i18n="selectNetwork">Wybierz sieć</option></select>
+    <form id="wifiForm">
+      <label for="ssidInput" data-i18n="ssid">Nazwa sieci (SSID)</label>
+      <input id="ssidInput" name="ssid" maxlength="32" autocomplete="off" required>
+      <label for="passwordInput" data-i18n="password">Hasło</label>
+      <input id="passwordInput" name="password" type="password" maxlength="63" autocomplete="new-password">
+      <button class="primary-button" type="submit" data-i18n="saveConnect">Zapisz i połącz</button>
+      <p class="form-message" id="wifiMessage" role="status"></p>
+    </form>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
