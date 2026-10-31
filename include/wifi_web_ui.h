@@ -7,38 +7,19 @@
 
 #include <functional>
 
-struct DeviceSettings {
-    uint16_t sensorIntervalMs = 1000;
-    uint32_t i2cClockHz = 100000;
-    uint32_t rs485Baud = 9600;
-    uint32_t uart1Baud = 9600;
-    uint8_t uart1Mode = 0;
-    uint16_t beeperFrequencyHz = 2000;
-    uint16_t beeperDurationMs = 250;
-    uint8_t gpio32SensorType = 2;
-    uint8_t gpio33SensorType = 0;
-    uint8_t displayMode = 0;
-    uint8_t displayPageSeconds = 5;
-    uint8_t displayBrightness = 160;
-    uint8_t displayRotation = 0;
-    uint8_t displayTextSize = 1;
-    uint8_t displayFieldMask = 0x3F;
-    uint8_t bluetoothMode = 1;
-    bool beeperEnabled = false;
-    bool displayEnabled = true;
-    bool s2InputEnabled = false;
-    bool temperature1Enabled = true;
-    bool temperature2Enabled = true;
-    bool bme680Enabled = true;
-    bool ens160Enabled = true;
-    bool compassEnabled = true;
-    bool gpsEnabled = false;
-    bool rtcEnabled = true;
-    bool pn532Enabled = true;
-};
+#include "config/config_service.h"
+#include "core/peripheral_registry.h"
+#include "display/screen_layout.h"
+#include "peripherals/ble_presence.h"
+#include "peripherals/current_inputs.h"
+#include "config/network_config.h"
 
 class WifiWebUi {
 public:
+    WifiWebUi(kc868a6::config::ConfigService &configuration,
+              kc868a6::core::PeripheralRegistry &registry)
+        : configuration_(configuration), registry_(registry) {}
+
     using StatusProvider = std::function<String()>;
     using RelayWriter = std::function<bool(uint8_t, bool)>;
     using SettingsApplier = std::function<void(const DeviceSettings &)>;
@@ -56,9 +37,25 @@ public:
                RadioPacketHistoryProvider radioPacketHistoryProvider = {});
     void prepare();
     void loop();
-    const DeviceSettings &settings() const { return settings_; }
+    const DeviceSettings &settings() const { return configuration_.settings(); }
+    const kc868a6::display::ScreenLayout &screenLayout() const { return screenLayout_; }
+    bool screenReady() const { return screenReady_; }
+    void setBluetoothPresence(kc868a6::peripherals::BlePresence &presence) { blePresence_ = &presence; }
+    void setCurrentInputs(kc868a6::peripherals::CurrentInputs &inputs) { currentInputs_ = &inputs; }
 
 private:
+    kc868a6::config::ConfigService &configuration_;
+    kc868a6::core::PeripheralRegistry &registry_;
+    kc868a6::display::ScreenLayout screenLayout_ = kc868a6::display::defaultLayout();
+    bool screenReady_ = true;
+    kc868a6::peripherals::BlePresence *blePresence_ = nullptr;
+    bool bleTargetReady_ = true;
+    kc868a6::peripherals::CurrentInputs *currentInputs_ = nullptr;
+    bool currentReady_ = true;
+    kc868a6::config::NetworkConfig networkConfig_;
+    bool networkReady_ = true;
+    bool mdnsReady_ = false;
+    uint32_t mdnsRetryAt_ = 0;
     WebServer server_{80};
     DNSServer dnsServer_;
     Preferences preferences_;
@@ -70,7 +67,6 @@ private:
     BluetoothScanner bluetoothScanner_;
     RadioPacketSender radioPacketSender_;
     RadioPacketHistoryProvider radioPacketHistoryProvider_;
-    DeviceSettings settings_;
     String webPassword_;
     String apSsid_;
     bool setupAccessPoint_ = false;
@@ -85,6 +81,12 @@ private:
     bool requireAuthentication();
     void serveFile(const String &path);
     void handleStatus();
+    void handleBoard();
+    void handleCapabilities();
+    void handleAction();
+    void handleSettingsSchema();
+    void handleScreen(bool save);
+    void loadScreen();
     void handleScan();
     void handleWifiSave();
     void handleRelay();
@@ -92,8 +94,16 @@ private:
     void handleSettings(bool save);
     void handleIfttt(bool save);
     void handleBluetoothScan();
+    void handleBluetoothTarget(bool save);
+    void loadBluetoothTarget();
+    void loadCurrentInputs();
+    void handleCurrentInputs(bool save);
+    void loadNetworkConfig();
+    void handleNetworkConfig(bool save);
+    void startMdns();
     void handleRf24Packets(bool save);
     void handleRf24Replay();
-    void loadSettings();
+    void sendSettingsError(const kc868a6::core::Result &result, int status,
+                           const kc868a6::core::ActionResult *action = nullptr);
     void reconnectWithSavedCredentials();
 };

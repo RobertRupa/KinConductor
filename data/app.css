@@ -29,6 +29,16 @@ body {
 }
 button, input, select { font: inherit; }
 button, select { cursor: pointer; }
+.hardware-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 12px; font-size: 10px; min-width: 0; }
+.hardware-summary div { min-width: 0; }
+.hardware-summary dt { font-weight: 800; opacity: .75; }
+.hardware-summary dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.current-panel { margin-top: 18px; }
+.current-channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.current-channel { min-width: 0; }
+.current-channel label, #networkSettingsForm .field-label { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; font-size: 12px; }
+.current-channel input:not([type="checkbox"]), .current-channel select, #networkSettingsForm input { width: 100%; min-height: 38px; padding: 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); }
+.current-channel input[type="checkbox"] { width: 20px; height: 20px; }
 .topbar {
   height: 68px;
   padding: 0 max(24px, calc((100vw - 1200px) / 2));
@@ -128,6 +138,28 @@ button, select { cursor: pointer; }
 .diagnostic-layout { grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr); }
 .diagnostic-line { display: flex; justify-content: space-between; gap: 12px; margin: 0; padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .diagnostic-line strong { color: var(--ink); text-align: right; overflow-wrap: anywhere; }
+.board-panel { grid-column: 1 / -1; min-width: 0; }
+.board-table-scroll { overflow-x: auto; }
+.board-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.board-table th, .board-table td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.board-table th { color: var(--muted); }
+.capability-modules, .schema-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.capability-properties { display: grid; gap: 6px; margin-bottom: 16px; }
+.capability-property { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; overflow-wrap: anywhere; }
+.capability-action { margin: 12px 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.capability-action input, .capability-action select, .schema-fields input, .schema-fields select { margin-bottom: 8px; }
+.capability-action > div, #iftttCapabilityParameters { display: grid; gap: 12px; }
+.capability-parameter { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.capability-parameter input:not([type="checkbox"]) { box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid #dce4dc; border-radius: 4px; background: #fbfcfa; color: var(--ink); }
+.capability-parameter.is-boolean { flex-direction: row; align-items: center; justify-content: space-between; }
+.capability-parameter input[type="checkbox"], .schema-fields input[type="checkbox"] { width: 20px; height: 20px; min-height: 0; margin: 0; flex: none; accent-color: #4b7553; }
+.screen-widget label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 11px; }
+.screen-widget input, .screen-widget select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; }
+.screen-page { margin: 16px 0; border-top: 1px solid var(--line); padding-top: 12px; }
+.screen-preview { display: grid; gap: 1px; aspect-ratio: 2; max-width: 512px; background: #111; padding: 1px; margin: 12px 0; }
+.screen-cell { min-width: 0; overflow: hidden; background: #25322b; color: white; padding: 6px; font-size: 12px; }
+.screen-widget { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.screen-widget input { width: 100px; }
 .field-hint { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
 .device-card { min-height: 75px; display: grid; grid-template-columns: 9px 1fr auto; align-items: start; gap: 9px; padding: 12px; background: #f7f9f6; border: 1px solid #ebefea; border-radius: 4px; }
 .device-dot { width: 7px; height: 7px; margin-top: 4px; background: #c6cec7; border-radius: 50%; }
@@ -140,6 +172,9 @@ button, select { cursor: pointer; }
 .ifttt-condition-row { display: grid; grid-template-columns: minmax(70px, .7fr) minmax(100px, 1.3fr); gap: 8px; }
 #iftttBuilderForm input, #iftttBuilderForm select { width: 100%; height: 39px; padding: 0 10px; color: var(--ink); background: #fbfcfa; border: 1px solid #dce4dc; border-radius: 4px; }
 #iftttBuilderForm input:focus, #iftttBuilderForm select:focus { outline: 2px solid #8eae63; outline-offset: 1px; }
+#iftttBuilderForm .capability-parameter input[type="checkbox"] { width: 20px; height: 20px; padding: 0; }
+#interfaceSettingsForm > input { box-sizing: border-box; width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid #dce4dc; border-radius: 4px; color: var(--ink); background: #fbfcfa; }
+.nearby-list .device-card > button { grid-column: 2 / -1; }
 .add-rule-button { width: 100%; margin-top: 17px; }
 .ifttt-rule-list { display: grid; gap: 8px; }
 .ifttt-rule { min-height: 54px; display: grid; grid-template-columns: 18px minmax(0, 1fr) 30px; align-items: center; gap: 9px; padding: 9px 10px; background: #f7f9f6; border: 1px solid #ebefea; border-radius: 4px; }
@@ -280,6 +315,10 @@ dialog input:focus, dialog select:focus { outline: 2px solid #8eae63; outline-of
   .page-tab { padding: 0 10px; white-space: nowrap; }
   .device-list { grid-template-columns: 1fr; }
   footer { gap: 12px; }
+}
+@media (max-width: 760px) {
+  .topbar { height: auto; min-height: 74px; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; gap: 12px; }
+  .hardware-summary { order: 3; flex-basis: 100%; margin: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }

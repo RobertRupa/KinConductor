@@ -1,0 +1,40 @@
+KC868-A6 Attribution License v1.0
+Copyright (c) 2026 Robert Rupa
+
+1. Permission
+
+Permission is granted, free of charge, to any person obtaining a copy of this
+software and its documentation, to use, reproduce, modify, and distribute the
+software and modified versions for personal, educational, and commercial
+purposes, subject to the attribution condition below.
+
+2. Attribution condition
+
+Every distributed copy or substantial portion of this software, including a
+modified version or software package containing it, must:
+
+  a. retain this license and the copyright notice; and
+  b. identify Robert Rupa in the project's Authors or Contributors information
+     and in the Authors/Contributors metadata of the distributed package.
+
+If a package format has no Authors or Contributors metadata field, the package
+must include a visible notice identifying Robert Rupa as an author. Attribution
+must not imply that Robert Rupa endorses the distributor or modified version.
+
+3. Third-party components
+
+Third-party components remain subject to their own licenses. This license does
+not replace or modify those licenses.
+
+4. Disclaimer of warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+5. Limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE AUTHORS AND COPYRIGHT
+HOLDERS SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

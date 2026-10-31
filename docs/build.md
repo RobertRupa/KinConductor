@@ -1,0 +1,220 @@
+# Build, upload and validation
+
+[Documentation index](./README.md) · [Project README](../README.md)
+
+PlatformIO firmware for the KinCony KC868-A6 based on ESP32-WROOM-32. Build
+and upload with PlatformIO:
+
+```sh
+pio run
+pio run -e kc868-a6-coprocessor -t upload --upload-port /dev/ttyUSB0
+pio run -e kc868-a6-coprocessor -t uploadfs --upload-port /dev/ttyUSB0
+pio run -e kc868-a6
+pio run -e kc868-a6-coprocessor
+pio device monitor
+```
+
+Select the serial upload port in the PlatformIO toolbar or add
+`upload_port = /dev/ttyUSB0` to `platformio.ini` for your system.
+Use the matching `-e` environment when uploading a feature-specific build.
+
+## Version 1.1.0: current validation
+
+The official pioarduino platform and tested libraries are pinned for this
+release; see [tagged releases and image packaging](./releases.md).
+Both firmware profiles and matching LittleFS images build successfully.
+Tests: 32 native groups plus BLE/transport suites with ASan/UBSan; 15 Node
+tests cover diagnostic/capability UI, header telemetry, calibration, hostname
+pattern and release artifacts. `actionlint` 1.7.7 validates the workflow locally.
+
+Final application binaries: base **1,532,032 B**, coprocessor **1,532,192 B**.
+OTA slot: 1,572,864 B; remaining 40,832 / 40,672 B (about 40 KiB).
+Static RAM: 75,096 B. LittleFS: 917,504 B per profile.
+Measure binary files, not only PlatformIO's linked-section percentage.
+This remains a tight budget, not capacity for all planned radio/protocol stacks.
+
+Base firmware without RF24/coprocessor and latest assets were flashed to the
+approved `/dev/ttyUSB0`, both hashes verified, NVS preserved.
+Live device `192.168.69.249`: seven modules / 51 properties; header confirms
+ESP32-D0WD-V3, two cores at 240 MHz, no PSRAM, 4 MiB flash.
+Thirty consecutive capability responses parsed successfully after fixing a
+transient truncated-JSON response caused by heap reallocation: the pool is
+target-size-aware and the serialized String reserves its exact length once.
+Allocation/serialization failures now return explicit HTTP errors.
+Observed live heap minimum during this stress check: 21,772 B; this is not a
+worst-case multi-peripheral guarantee.
+
+Hostname canonicalization/save/reconnect and actual LAN mDNS resolution
+`kinconductor-test.local → 192.168.69.249` passed; hostname was restored.
+Current-config invalid requests preserve the previous record; browser ADC
+capture, voltage-mode save and uncalibrated quality passed, then all channels
+were restored OFF. Hostname/calibration survived the subsequent asset-upload
+reset. At 390 px, current inputs are 38 px high, checkboxes 20×20, no horizontal
+overflow or header overlap. Browser tests used DOM-triggered clicks/submissions,
+not complete pointer/accessibility coverage.
+No physical current sensor or AC RMS calibration was performed.
+GitHub publication/Actions execution has **not** been performed in this session.
+
+## Deployment precautions and current profiles
+
+Confirm that `/dev/ttyUSB0` is the intended board, not another serial device.
+Disconnect loads that could be unsafe during reset; relays initialize OFF,
+but persisted IFTTT rules can act after startup. Uploading resets the controller.
+Do not erase NVS or alter the partition table as part of routine deployment.
+Uploading LittleFS replaces the web-assets filesystem.
+
+`kc868-a6-coprocessor` is the default; `kc868-a6` keeps normal UART1 defaults.
+The former selects a diagnostic UART1 default of 115200 baud on GPIO16/17,
+not an implemented P17 or Zigbee/Thread bridge. Stored settings override
+defaults. `KC868_BOARD_PROFILE_COPROCESSOR` is currently an unused marker;
+`KC868_BOARD_PN532_SPI` only selects the resource-plan transport.
+Other `KC868_BOARD_*` options currently affect reservation validation, not
+hardware routing; do not use them to claim working P17/DAC/PN532-I2C support.
+
+Separate GPS/LoRa/nRF24 environments were removed. GPS and radio code still
+uses compile flags; selecting GPS mode in the settings remains possible.
+If enabling `USE_RADIO_NRF24`, also declare `nrf24/RF24` in `lib_deps`;
+the maintained profiles do not currently include that dependency.
+Do not enable LoRa and nRF24 together.
+
+
+### Local validation and project metadata
+
+Run the native characterization/contract tests after restoring the normal
+firmware dependencies:
+
+```sh
+pio run -e kc868-a6
+bash test/run_native.sh
+```
+
+The runner uses `g++` (or `CXX`), the existing ArduinoJson dependency, no RTTI
+or exceptions, and AddressSanitizer/UndefinedBehaviorSanitizer. A total of
+32 test groups plus BLE-presence/transport suites cover registry lifecycle/errors/limits, typed actions, stale
+timestamps including `millis()` rollover, ADC failure recovery, exact legacy
+JSON, all numeric settings bounds, profile defaults, record versions and
+configuration failure/recovery. The production NVS adapter is exercised with
+an isolated native Preferences test double; physical NVS power-loss behavior
+and hardware reconfiguration still require board tests.
+It removes its temporary executable on exit.
+
+Optional npm shortcuts are defined in [package.json](../package.json):
+
+```sh
+npm test             # Native suites and 15 JavaScript/UI/release tests
+npm run build:a6     # Base firmware, without RF24/coprocessor flags
+npm run build       # Default coprocessor firmware
+npm run build:matrix
+npm run build:fs    # Build the LittleFS image with the updated WebGUI
+```
+
+Node.js 18+ is only required for the JavaScript tests/npm shortcuts; firmware
+still builds with PlatformIO alone. No npm dependencies or installation are
+required. DOM tests use Node's built-in runner and execute the production
+diagnostic fetch/render functions; they are not browser/layout tests.
+The current capability slice also received an integrated-browser smoke test
+against explicitly synthetic APIs. Device testing remains separate.
+Deploy both firmware and the updated LittleFS assets to see matching APIs/UI.
+The earlier board-diagnostics slice added 24 B static RAM and about 4.3 KiB linked flash; complete
+firmware images occupy 92.94–93.17% of the unchanged OTA slot. See
+[the progress report](../REFACTOR_TODO.md#13-todo-dla-agentów-llm--kolejność-i-zależności)
+for historical per-profile measurements and the latest deployment record.
+
+### Initial capability slice: historical build measurements
+
+Both maintained profiles and the base LittleFS image built successfully.
+The latest complete firmware images are 1,485,872 bytes (base) and
+1,486,048 bytes (coprocessor), about 94.47–94.48% of the unchanged 1,572,864-byte
+OTA slot. Only about 85 KiB remains; this is not a budget for enabling every
+planned extension simultaneously. The base image grew by 24,112 bytes from
+the previously deployed image. Static RAM is 69,040 bytes (+2,416 bytes);
+this is not a measurement of runtime heap usage or worst-case concurrent APIs.
+The LittleFS image is 917,504 bytes, the unchanged partition image size.
+No dependencies, partition table or release version were changed.
+
+After a future base upload, verify `/api/capabilities`, `/api/settings/schema`
+and `/api/screen` in addition to status/board/settings. Old firmware does not
+implement these routes, and uploading only the new assets is insufficient.
+The browser synthetic preview was not installed firmware and was stopped after
+testing. The later extension deployment below includes these APIs.
+
+After upload, verify the serial startup log and, when the device is reachable,
+the status/board endpoints. Upload success verifies flash transfer, not physical
+peripheral operation, long-term reliability or completion of the full plan.
+
+## Earlier diagnostic deployment — 2026-10-31
+
+The final installed firmware is **`kc868-a6` without coprocessor flags**, as
+requested for this deployment. The project default remains
+`kc868-a6-coprocessor`; use an explicit `-e kc868-a6` for subsequent base-board
+uploads. A prior coprocessor upload was replaced with the base image.
+
+- `npm test`: 25 native test groups and four diagnostic UI tests passed.
+- Both maintained firmware profiles built successfully.
+- Firmware transfer on `/dev/ttyUSB0`: 1,461,760 bytes, flash hash verified.
+- Current LittleFS assets were uploaded and their flash hash verified.
+- NVS was preserved; no full-chip erase was performed.
+- Serial startup: OLED and RTC available, LittleFS mounted with index present,
+  Wi-Fi connected. BME680/ENS160/compass/PN532 were not detected.
+- Local authenticated HTTP checks passed: `/api/status` reported configuration
+  ready and four ADC channels; `/api/board` reported a valid plan with 26 pins;
+  `/api/settings` reported UART1 mode 0 at 9600 baud; `/` contained the new
+  diagnostic table.
+
+These are deployment/startup checks, not tests of relay loads, every optional
+peripheral, power-loss recovery or the entire 50-task implementation plan.
+
+## Extension deployment — 2026-10-31
+
+After the user confirmed the board/port and safe loads, base **`kc868-a6`**
+firmware and matching LittleFS were flashed successfully on `/dev/ttyUSB0`.
+No coprocessor/RF24 flags or RF24 dependency were enabled. Symbol inspection
+confirms the RF24 driver, packet history and persisted replay functions are absent.
+RF24 was already disabled in the maintained profile; this slice additionally
+removes its otherwise compiled monitor/storage implementation. No artificial
+GPS/radio-specific environment was added.
+
+- Final installed firmware: **1,513,312 bytes**, hash verified. Coprocessor
+  build: 1,513,472 bytes. About 96.21–96.22% of the unchanged OTA slot,
+  leaving approximately **58 KiB**; do not assume every planned driver fits.
+- Static RAM: **74,384 bytes**. Short real-board checks observed free heap
+  53,736 bytes / minimum 22,544 bytes; earlier browser/API checks reached
+  minimum 22,136 bytes. These are observations, not a long-term or worst-case budget.
+- LittleFS: 917,504-byte image, flash hash verified. NVS/partition layout preserved.
+  Settings schema v1 was readable and new fields defaulted safely; subsequent
+  settings writes use version 2 without discarding existing fields.
+- Native suites and nine JS tests passed; both maintained firmware profiles built.
+- Authenticated real APIs: six modules, 33 schema fields, Wi-Fi connected,
+  BLE target validation/canonical save/readback, `warming_up` before first sighting,
+  invalid PWM duty and overlapping output rejection, grid font/unit
+  save/readback/rejection. Temporary targets/grid changes were restored.
+- Real UDP packet reception updated count/text; `/api/actions` sent a reply
+  received by a local socket. The temporary listen-port setting was restored.
+- GPIO25 PWM enable + 50% action was accepted and reflected in its property,
+  then set to zero and disabled/restored. This verifies local LEDC dispatch,
+  **not an oscilloscope waveform, 0–10 V conversion or motor operation**.
+- Browser DOM/layout smoke on a temporary real-device proxy verified IO numeric
+  fields at 38 px height, 20×20 px checkboxes in IO/IFTTT, canonical sources,
+  font choices and the 33-field settings form. At a 390 px viewport the IO
+  form had no horizontal document overflow. Browser native click automation
+  timed out; programmatic DOM clicks were used, so this is not an exhaustive
+  pointer/accessibility test. Proxy/testing helper was stopped and removed.
+- Physical DHT11, BLE arrival/departure, UART peers and fan-control voltage
+  remain unverified without the respective external devices.
+
+Run firmware upload and filesystem upload as **separate commands**:
+
+```sh
+pio run -e kc868-a6 -t upload --upload-port /dev/ttyUSB0
+pio run -e kc868-a6 -t uploadfs --upload-port /dev/ttyUSB0
+```
+
+A combined `-t upload -t uploadfs` invocation caused PlatformIO's dependency
+scanner to omit BusIO headers; separate upload commands succeeded without
+installing new packages. The installed WebGUI is served by the board, not
+the earlier static/synthetic preview.
+
+Each completed refactor slice ends with updating README, the implementation
+checklist and affected project metadata/manifests. Change dependencies,
+build flags, partition layout or release version only when the slice actually
+requires it; do not advertise planned drivers as implemented.

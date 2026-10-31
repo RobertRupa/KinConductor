@@ -5,6 +5,10 @@
 #include <LittleFS.h>
 #include <WiFi.h>
 
+#include "config/settings_json.h"
+#include "web/board_status.h"
+#include "web/capabilities.h"
+
 namespace {
 
 String makeRandomPassword(size_t length) {
@@ -26,6 +30,7 @@ String mimeType(const String &path) {
     return "application/octet-stream";
 }
 
+#if defined(USE_RADIO_NRF24)
 bool findSavedRf24Packet(Preferences &preferences, uint32_t packetId,
                          uint32_t &payload) {
     DynamicJsonDocument packets(2048);
@@ -39,6 +44,7 @@ bool findSavedRf24Packet(Preferences &preferences, uint32_t packetId,
     }
     return false;
 }
+#endif
 
 }
 
@@ -59,6 +65,9 @@ void WifiWebUi::begin(StatusProvider statusProvider, RelayWriter relayWriter,
     radioPacketHistoryProvider_ = std::move(radioPacketHistoryProvider);
 
     prepare();
+    loadScreen();
+    loadBluetoothTarget();
+    loadCurrentInputs();
     if (preferencesReady_ && iftttUpdater_) {
         iftttUpdater_(preferences_.getString("ifttt", "[]"));
     }
@@ -67,7 +76,7 @@ void WifiWebUi::begin(StatusProvider statusProvider, RelayWriter relayWriter,
         webPassword_ = makeRandomPassword(12);
         preferences_.putString("webpass", webPassword_);
     }
-    if (settingsApplier_) settingsApplier_(settings_);
+    if (settingsApplier_) settingsApplier_(settings());
 
     if (!LittleFS.begin(false, "/littlefs", 10, "littlefs")) {
         Serial.println("ERROR: LittleFS mount failed (partition: littlefs)");
@@ -84,7 +93,7 @@ void WifiWebUi::begin(StatusProvider statusProvider, RelayWriter relayWriter,
     } else {
         Serial.printf("Wi-Fi connected: %s (%s)\n", WiFi.SSID().c_str(),
                       WiFi.localIP().toString().c_str());
-        MDNS.begin("kc868-a6");
+        startMdns();
     }
 
     Serial.printf("Web login: admin / %s\n", webPassword_.c_str());
@@ -97,19 +106,33 @@ void WifiWebUi::prepare() {
         Serial.println("ERROR: could not open NVS namespace kc868a6");
         return;
     }
-    loadSettings();
+    const auto loaded = configuration_.begin();
+    if (!loaded.ok()) {
+        Serial.printf("ERROR: settings load failed: %s (%.*s)\n",
+                      kc868a6::core::errorCodeName(loaded.code),
+                      static_cast<int>(loaded.subject.size()), loaded.subject.data());
+    }
+#if defined(USE_RADIO_NRF24)
     if (!preferences_.isKey("rf24_saved")) {
         preferences_.putString("rf24_saved", "[]");
     }
+#endif
     String savedRules = preferences_.getString("ifttt", "[]");
-    DynamicJsonDocument savedRulesDocument(2048);
-    bool rulesAreValid = !deserializeJson(savedRulesDocument, savedRules) &&
+    DynamicJsonDocument savedRulesDocument(8192);
+    const auto rulesError = deserializeJson(savedRulesDocument, savedRules);
+    if (rulesError == DeserializationError::NoMemory) {
+        Serial.println("ERROR: IFTTT rules exceed JSON capacity; preserving NVS record");
+        preferencesReady_ = true;
+        loadNetworkConfig();
+        return;
+    }
+    bool rulesAreValid = !rulesError &&
                          savedRulesDocument.is<JsonArray>();
     if (!rulesAreValid) {
         for (size_t offset = 1; offset < savedRules.length(); ++offset) {
             if (savedRules[offset] != '[') continue;
             String candidate = savedRules.substring(offset);
-            DynamicJsonDocument candidateDocument(2048);
+            DynamicJsonDocument candidateDocument(8192);
             if (!deserializeJson(candidateDocument, candidate) &&
                 candidateDocument.is<JsonArray>()) {
                 savedRules = candidate;
@@ -124,10 +147,19 @@ void WifiWebUi::prepare() {
                            : "Reset invalid IFTTT rules in NVS");
     }
     preferencesReady_ = true;
+    loadNetworkConfig();
 }
 
 bool WifiWebUi::connectToWifi(const String &ssid, const String &password) {
+    if (!networkReady_) {
+        Serial.println("ERROR: network configuration unavailable; use setup to repair");
+        return false;
+    }
     WiFi.mode(WIFI_STA);
+    if (!WiFi.setHostname(networkConfig_.hostname.data())) {
+        Serial.println("ERROR: could not set Wi-Fi hostname");
+        return false;
+    }
     WiFi.setSleep(false);
     WiFi.begin(ssid.c_str(), password.c_str());
 
@@ -168,8 +200,41 @@ void WifiWebUi::startServer() {
     server_.on("/app.js", HTTP_GET, [this]() {
         if (requireAuthentication()) serveFile("/app.js");
     });
+    server_.on("/capabilities.js", HTTP_GET, [this]() {
+        if (requireAuthentication()) serveFile("/capabilities.js");
+    });
     server_.on("/api/status", HTTP_GET, [this]() {
         if (requireAuthentication()) handleStatus();
+    });
+    server_.on("/api/board", HTTP_GET, [this]() {
+        if (requireAuthentication()) handleBoard();
+    });
+    server_.on("/api/capabilities", HTTP_GET, [this]() {
+        if (requireAuthentication()) handleCapabilities();
+    });
+    server_.on("/api/actions", HTTP_POST, [this]() {
+        if (requireAuthentication()) handleAction();
+    });
+    server_.on("/api/settings/schema", HTTP_GET, [this]() {
+        if (requireAuthentication()) handleSettingsSchema();
+    });
+    server_.on("/api/network", HTTP_GET, [this]() {
+        if (requireAuthentication()) handleNetworkConfig(false);
+    });
+    server_.on("/api/network", HTTP_POST, [this]() {
+        if (requireAuthentication()) handleNetworkConfig(true);
+    });
+    server_.on("/api/current", HTTP_GET, [this]() {
+        if (requireAuthentication()) handleCurrentInputs(false);
+    });
+    server_.on("/api/current", HTTP_POST, [this]() {
+        if (requireAuthentication()) handleCurrentInputs(true);
+    });
+    server_.on("/api/screen", HTTP_GET, [this]() {
+        if (requireAuthentication()) handleScreen(false);
+    });
+    server_.on("/api/screen", HTTP_POST, [this]() {
+        if (requireAuthentication()) handleScreen(true);
     });
     server_.on("/api/scan", HTTP_GET, [this]() {
         if (requireAuthentication()) handleScan();
@@ -197,6 +262,12 @@ void WifiWebUi::startServer() {
     });
     server_.on("/api/bluetooth/scan", HTTP_GET, [this]() {
         if (requireAuthentication()) handleBluetoothScan();
+    });
+    server_.on("/api/bluetooth/target", HTTP_GET, [this]() {
+        if (requireAuthentication()) handleBluetoothTarget(false);
+    });
+    server_.on("/api/bluetooth/target", HTTP_POST, [this]() {
+        if (requireAuthentication()) handleBluetoothTarget(true);
     });
     server_.on("/api/rf24/packets", HTTP_GET, [this]() {
         if (requireAuthentication()) handleRf24Packets(false);
@@ -256,11 +327,141 @@ void WifiWebUi::handleStatus() {
                          : WiFi.softAPIP().toString();
     network["rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
     network["setup"] = setupAccessPoint_;
-    network["hostname"] = "kc868-a6.local";
+    network["hostname"] = networkConfig_.hostname.data();
+    network["mdns"] = String(networkConfig_.hostname.data()) + ".local";
+    network["mdnsReady"] = mdnsReady_;
+    network["configurationReady"] = networkReady_;
+    network["udpListenAddress"] = "0.0.0.0";
+    network["udpListenPort"] = settings().udpListenPort;
+    network["reconnectPending"] = reconnectPending_;
 
+    String response;
+    if (document.overflowed()) {
+        sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "status"}, 500);
+        return;
+    }
+    serializeJson(document, response);
+    server_.send(200, "application/json", response);
+}
+
+void WifiWebUi::handleBoard() {
+    DynamicJsonDocument document(kc868a6::web::boardJsonCapacity);
+    const auto written = kc868a6::web::writeBoardStatus(
+        document.to<JsonObject>(), settings(), kc868a6::board::compiledBoardOptions(),
+        configuration_.status());
+    if (!written.ok()) {
+        sendSettingsError(written, 500);
+        return;
+    }
     String response;
     serializeJson(document, response);
     server_.send(200, "application/json", response);
+}
+
+void WifiWebUi::handleCapabilities() {
+    DynamicJsonDocument document(kc868a6::web::capabilitiesJsonCapacity);
+    const auto result = kc868a6::web::writeCapabilities(document.to<JsonObject>(), registry_, millis());
+    if (!result.ok()) { sendSettingsError(result, 500); return; }
+    String body;
+    const size_t length = measureJson(document);
+    if (!body.reserve(length) || serializeJson(document, body) != length || body.length() != length) {
+        sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "capabilities_response"}, 500);
+        return;
+    }
+    server_.send(200, "application/json", body);
+}
+
+void WifiWebUi::handleAction() {
+    if (server_.arg("plain").length() > 1024) {
+        sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "action_request"}, 413);
+        return;
+    }
+    DynamicJsonDocument request(8192);
+    if (server_.arg("plain").length() > 8192) {
+        sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "ifttt"}, 413);
+        return;
+    }
+    if (deserializeJson(request, server_.arg("plain"))) {
+        sendSettingsError({kc868a6::core::ErrorCode::InvalidArgument, "action_json"}, 400);
+        return;
+    }
+    const auto action = kc868a6::web::executeJsonAction(registry_, request.as<JsonVariantConst>());
+    if (!action.result.ok()) {
+        const auto code = action.result.code;
+        sendSettingsError(action.result, code == kc868a6::core::ErrorCode::NotFound ? 404
+            : code == kc868a6::core::ErrorCode::InvalidArgument ? 400
+            : code == kc868a6::core::ErrorCode::Unavailable ? 503 : 500, &action);
+        return;
+    }
+    StaticJsonDocument<128> response;
+    response["applied"] = action.applied;
+    response["confirmed"] = action.confirmed;
+    String body;
+    serializeJson(response, body);
+    server_.send(200, "application/json", body);
+}
+
+void WifiWebUi::handleSettingsSchema() {
+    DynamicJsonDocument document(8192);
+    const auto result = kc868a6::config::writeSettingsSchema(document.to<JsonObject>());
+    if (!result.ok()) { sendSettingsError(result, 500); return; }
+    String body;
+    serializeJson(document, body);
+    server_.send(200, "application/json", body);
+}
+
+void WifiWebUi::loadScreen() {
+    if (!preferencesReady_) { screenReady_ = false; return; }
+    if (!preferences_.isKey("screen_grid")) return;
+    DynamicJsonDocument document(kc868a6::display::layoutJsonCapacity);
+    const String stored = preferences_.getString("screen_grid");
+    kc868a6::core::Result result;
+    if (stored.length() > kc868a6::display::layoutJsonCapacity || deserializeJson(document, stored)) {
+        result = {kc868a6::core::ErrorCode::InvalidArgument, "screen_record"};
+    } else {
+        result = kc868a6::display::readLayout(document.as<JsonVariantConst>(), registry_, screenLayout_);
+    }
+    if (!result.ok()) {
+        screenReady_ = false;
+        Serial.printf("ERROR: screen load failed: %s\n", kc868a6::core::errorCodeName(result.code));
+    }
+}
+
+void WifiWebUi::handleScreen(bool save) {
+    if (!preferencesReady_) {
+        sendSettingsError({kc868a6::core::ErrorCode::StorageUnavailable, "screen"}, 503);
+        return;
+    }
+    if (save) {
+        if (server_.arg("plain").length() > kc868a6::display::layoutJsonCapacity) {
+            sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "screen"}, 413); return;
+        }
+        DynamicJsonDocument request(kc868a6::display::layoutJsonCapacity);
+        if (deserializeJson(request, server_.arg("plain"))) {
+            sendSettingsError({kc868a6::core::ErrorCode::InvalidArgument, "screen_json"}, 400); return;
+        }
+        kc868a6::display::ScreenLayout candidate;
+        const auto valid = kc868a6::display::readLayout(request.as<JsonVariantConst>(), registry_, candidate);
+        if (!valid.ok()) { sendSettingsError(valid, 400); return; }
+        String encoded;
+        serializeJson(request, encoded);
+        if (preferences_.putString("screen_grid", encoded) != encoded.length() ||
+            preferences_.getString("screen_grid") != encoded) {
+            screenReady_ = false;
+            sendSettingsError({kc868a6::core::ErrorCode::StorageWriteFailed, "screen_grid"}, 500); return;
+        }
+        screenLayout_ = candidate;
+        screenReady_ = true;
+    }
+    if (!screenReady_) {
+        sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "screen_layout"}, 503); return;
+    }
+    DynamicJsonDocument document(kc868a6::display::layoutJsonCapacity);
+    const auto written = kc868a6::display::writeLayout(document.to<JsonObject>(), screenLayout_);
+    if (!written.ok()) { sendSettingsError(written, 500); return; }
+    String body;
+    serializeJson(document, body);
+    server_.send(200, "application/json", body);
 }
 
 void WifiWebUi::handleScan() {
@@ -321,7 +522,7 @@ void WifiWebUi::handleRelay() {
 }
 
 void WifiWebUi::handleBeeperTest() {
-    if (!settings_.beeperEnabled) {
+    if (!settings().beeperEnabled) {
         server_.send(409, "application/json", "{\"error\":\"beeper_disabled\"}");
         return;
     }
@@ -332,179 +533,65 @@ void WifiWebUi::handleBeeperTest() {
     server_.send(200, "application/json", "{\"ok\":true}");
 }
 
-void WifiWebUi::loadSettings() {
-#if defined(USE_GPS)
-    constexpr uint8_t defaultUart1Mode = 1;
-#elif defined(USE_ZIGBEE_THREAD_COPROCESSOR)
-    constexpr uint8_t defaultUart1Mode = 2;
-#else
-    constexpr uint8_t defaultUart1Mode = 0;
-#endif
-    settings_.sensorIntervalMs = preferences_.getUShort("sensor_ms", 1000);
-    settings_.i2cClockHz = preferences_.getUInt("i2c_hz", 100000);
-    settings_.rs485Baud = preferences_.getUInt("rs485_baud", 9600);
-    settings_.uart1Mode = preferences_.getUChar("uart1_mode", defaultUart1Mode);
-    settings_.uart1Baud = preferences_.getUInt(
-        "uart1_baud", settings_.uart1Mode == 2 ? 115200 : 9600);
-    settings_.beeperFrequencyHz = preferences_.getUShort("beep_hz", 2000);
-    settings_.beeperDurationMs = preferences_.getUShort("beep_ms", 250);
-    settings_.gpio32SensorType = preferences_.getUChar("gpio32_type", 2);
-    settings_.gpio33SensorType = preferences_.getUChar("gpio33_type", 0);
-    settings_.displayMode = preferences_.getUChar("display_mode", 0);
-    settings_.displayPageSeconds = preferences_.getUChar("display_secs", 5);
-    settings_.displayBrightness = preferences_.getUChar("display_bright", 160);
-    settings_.displayRotation = preferences_.getUChar("display_rotate", 0);
-    settings_.displayTextSize = preferences_.getUChar("display_size", 1);
-    settings_.displayFieldMask = preferences_.getUChar("display_fields", 0x3F);
-    settings_.bluetoothMode = preferences_.getUChar("bt_mode", 1);
-    settings_.beeperEnabled = preferences_.getBool("beep_on", false);
-    settings_.displayEnabled = preferences_.getBool("display_on", true);
-    settings_.s2InputEnabled = preferences_.getBool("s2_input", false);
-    settings_.temperature1Enabled = preferences_.getBool("temp1_on", true);
-    settings_.temperature2Enabled = preferences_.getBool("temp2_on", true);
-    settings_.temperature1Enabled = settings_.gpio32SensorType != 0;
-    settings_.temperature2Enabled = settings_.gpio33SensorType != 0;
-    settings_.bme680Enabled = preferences_.getBool("bme_on", true);
-    settings_.ens160Enabled = preferences_.getBool("ens_on", true);
-    settings_.compassEnabled = preferences_.getBool("compass_on", true);
-    settings_.gpsEnabled = preferences_.getBool(
-        "gps_on", settings_.uart1Mode == 1);
-    settings_.rtcEnabled = preferences_.getBool("rtc_on", true);
-    settings_.pn532Enabled = preferences_.getBool("pn532_on", true);
+void WifiWebUi::sendSettingsError(const kc868a6::core::Result &result, int status,
+                                 const kc868a6::core::ActionResult *action) {
+    Serial.printf("ERROR: settings request failed: %s (%.*s)\n",
+                  kc868a6::core::errorCodeName(result.code),
+                  static_cast<int>(result.subject.size()), result.subject.data());
+    StaticJsonDocument<256> response;
+    response["error"] = result.code == kc868a6::core::ErrorCode::InvalidArgument
+                            ? "invalid_settings"
+                            : kc868a6::core::errorCodeName(result.code);
+    response["field"] = String(result.subject.data(), result.subject.size());
+    if (action) {
+        response["applied"] = action->applied;
+        response["confirmed"] = action->confirmed;
+    }
+    String body;
+    serializeJson(response, body);
+    server_.send(status, "application/json", body);
 }
 
 void WifiWebUi::handleSettings(bool save) {
+    if (!configuration_.ready()) {
+        sendSettingsError(configuration_.status(), 503);
+        return;
+    }
     if (save) {
-        DynamicJsonDocument request(2048);
+        if (server_.arg("plain").length() > kc868a6::config::settingsJsonCapacity) {
+            sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded,
+                               "settings_request"}, 413);
+            return;
+        }
+        DynamicJsonDocument request(kc868a6::config::settingsJsonCapacity);
         if (deserializeJson(request, server_.arg("plain"))) {
             server_.send(400, "application/json", "{\"error\":\"invalid_json\"}");
             return;
         }
-
-        const uint16_t interval = request["sensorIntervalMs"] | settings_.sensorIntervalMs;
-        const uint32_t i2cClock = request["i2cClockHz"] | settings_.i2cClockHz;
-        const uint32_t rs485Baud = request["rs485Baud"] | settings_.rs485Baud;
-        const uint32_t uart1Baud = request["uart1Baud"] | settings_.uart1Baud;
-        const uint8_t uart1Mode = request["uart1Mode"] | settings_.uart1Mode;
-        const uint16_t beeperFrequency = request["beeperFrequencyHz"] | settings_.beeperFrequencyHz;
-        const uint16_t beeperDuration = request["beeperDurationMs"] | settings_.beeperDurationMs;
-        const uint8_t gpio32Type = request["gpio32SensorType"] | settings_.gpio32SensorType;
-        const uint8_t gpio33Type = request["gpio33SensorType"] | settings_.gpio33SensorType;
-        const uint8_t displayMode = request["displayMode"] | settings_.displayMode;
-        const uint8_t displaySeconds = request["displayPageSeconds"] | settings_.displayPageSeconds;
-        const uint8_t displayBrightness = request["displayBrightness"] | settings_.displayBrightness;
-        const uint8_t displayRotation = request["displayRotation"] | settings_.displayRotation;
-        const uint8_t displayTextSize = request["displayTextSize"] | settings_.displayTextSize;
-        const uint8_t displayFieldMask = request["displayFieldMask"] | settings_.displayFieldMask;
-        const uint8_t bluetoothMode = request["bluetoothMode"] | settings_.bluetoothMode;
-        const bool validBaud = uart1Baud == 9600 || uart1Baud == 19200 ||
-                               uart1Baud == 38400 || uart1Baud == 57600 ||
-                               uart1Baud == 115200;
-        const bool validRs485Baud = rs485Baud == 9600 || rs485Baud == 19200 ||
-                                    rs485Baud == 38400 || rs485Baud == 57600 ||
-                                    rs485Baud == 115200;
-        if (interval < 500 || interval > 60000 ||
-                        (i2cClock != 50000 && i2cClock != 100000) ||
-                        !validBaud || !validRs485Baud ||
-                        uart1Mode > 2 ||
-            beeperFrequency < 250 || beeperFrequency > 5000 ||
-            beeperDuration < 50 || beeperDuration > 3000 ||
-            gpio32Type > 2 || gpio33Type > 2 || displayMode > 4 ||
-            displaySeconds < 2 || displaySeconds > 60 || displayRotation > 3 ||
-            displayTextSize < 1 || displayTextSize > 2 ||
-            displayFieldMask > 0x3F || bluetoothMode > 2) {
-            server_.send(400, "application/json", "{\"error\":\"invalid_settings\"}");
+        DeviceSettings candidate;
+        const auto parsed = kc868a6::config::readSettingsJson(
+            request.as<JsonVariantConst>(), settings(), candidate);
+        if (!parsed.ok()) {
+            sendSettingsError(parsed, 400);
             return;
         }
-
-        settings_.sensorIntervalMs = interval;
-        settings_.i2cClockHz = i2cClock;
-        settings_.rs485Baud = rs485Baud;
-        settings_.uart1Baud = uart1Baud;
-        settings_.uart1Mode = uart1Mode;
-        settings_.beeperFrequencyHz = beeperFrequency;
-        settings_.beeperDurationMs = beeperDuration;
-        settings_.gpio32SensorType = gpio32Type;
-        settings_.gpio33SensorType = gpio33Type;
-        settings_.temperature1Enabled = gpio32Type != 0;
-        settings_.temperature2Enabled = gpio33Type != 0;
-        settings_.displayMode = displayMode;
-        settings_.displayPageSeconds = displaySeconds;
-        settings_.displayBrightness = displayBrightness;
-        settings_.displayRotation = displayRotation;
-        settings_.displayTextSize = displayTextSize;
-        settings_.displayFieldMask = displayFieldMask;
-        settings_.bluetoothMode = bluetoothMode;
-        settings_.beeperEnabled = request["beeperEnabled"] | settings_.beeperEnabled;
-        settings_.displayEnabled = request["displayEnabled"] | settings_.displayEnabled;
-        settings_.s2InputEnabled = request["s2InputEnabled"] | settings_.s2InputEnabled;
-        settings_.temperature1Enabled = gpio32Type != 0;
-        settings_.temperature2Enabled = gpio33Type != 0;
-        settings_.bme680Enabled = request["bme680Enabled"] | settings_.bme680Enabled;
-        settings_.ens160Enabled = request["ens160Enabled"] | settings_.ens160Enabled;
-        settings_.compassEnabled = request["compassEnabled"] | settings_.compassEnabled;
-        settings_.gpsEnabled = request["gpsEnabled"] | settings_.gpsEnabled;
-        settings_.rtcEnabled = request["rtcEnabled"] | settings_.rtcEnabled;
-        settings_.pn532Enabled = request["pn532Enabled"] | settings_.pn532Enabled;
-
-        preferences_.putUShort("sensor_ms", settings_.sensorIntervalMs);
-        preferences_.putUInt("i2c_hz", settings_.i2cClockHz);
-        preferences_.putUInt("rs485_baud", settings_.rs485Baud);
-        preferences_.putUInt("uart1_baud", settings_.uart1Baud);
-        preferences_.putUChar("uart1_mode", settings_.uart1Mode);
-        preferences_.putUShort("beep_hz", settings_.beeperFrequencyHz);
-        preferences_.putUShort("beep_ms", settings_.beeperDurationMs);
-        preferences_.putUChar("gpio32_type", settings_.gpio32SensorType);
-        preferences_.putUChar("gpio33_type", settings_.gpio33SensorType);
-        preferences_.putUChar("display_mode", settings_.displayMode);
-        preferences_.putUChar("display_secs", settings_.displayPageSeconds);
-        preferences_.putUChar("display_bright", settings_.displayBrightness);
-        preferences_.putUChar("display_rotate", settings_.displayRotation);
-        preferences_.putUChar("display_size", settings_.displayTextSize);
-        preferences_.putUChar("display_fields", settings_.displayFieldMask);
-        preferences_.putUChar("bt_mode", settings_.bluetoothMode);
-        preferences_.putBool("beep_on", settings_.beeperEnabled);
-        preferences_.putBool("display_on", settings_.displayEnabled);
-        preferences_.putBool("s2_input", settings_.s2InputEnabled);
-        preferences_.putBool("temp1_on", settings_.temperature1Enabled);
-        preferences_.putBool("temp2_on", settings_.temperature2Enabled);
-        preferences_.putBool("bme_on", settings_.bme680Enabled);
-        preferences_.putBool("ens_on", settings_.ens160Enabled);
-        preferences_.putBool("compass_on", settings_.compassEnabled);
-        preferences_.putBool("gps_on", settings_.gpsEnabled);
-        preferences_.putBool("rtc_on", settings_.rtcEnabled);
-        preferences_.putBool("pn532_on", settings_.pn532Enabled);
-        if (settingsApplier_) settingsApplier_(settings_);
+        const bool changed = !kc868a6::config::equalSettings(settings(), candidate);
+        const auto stored = configuration_.update(candidate);
+        if (!stored.ok()) {
+            sendSettingsError(stored,
+                stored.code == kc868a6::core::ErrorCode::ResourceConflict ? 409 : 500);
+            return;
+        }
+        if (changed && settingsApplier_) settingsApplier_(settings());
     }
 
-    DynamicJsonDocument response(2048);
-    response["sensorIntervalMs"] = settings_.sensorIntervalMs;
-    response["i2cClockHz"] = settings_.i2cClockHz;
-    response["rs485Baud"] = settings_.rs485Baud;
-    response["uart1Baud"] = settings_.uart1Baud;
-    response["uart1Mode"] = settings_.uart1Mode;
-    response["beeperFrequencyHz"] = settings_.beeperFrequencyHz;
-    response["beeperDurationMs"] = settings_.beeperDurationMs;
-    response["gpio32SensorType"] = settings_.gpio32SensorType;
-    response["gpio33SensorType"] = settings_.gpio33SensorType;
-    response["displayMode"] = settings_.displayMode;
-    response["displayPageSeconds"] = settings_.displayPageSeconds;
-    response["displayBrightness"] = settings_.displayBrightness;
-    response["displayRotation"] = settings_.displayRotation;
-    response["displayTextSize"] = settings_.displayTextSize;
-    response["displayFieldMask"] = settings_.displayFieldMask;
-    response["bluetoothMode"] = settings_.bluetoothMode;
-    response["beeperEnabled"] = settings_.beeperEnabled;
-    response["displayEnabled"] = settings_.displayEnabled;
-    response["s2InputEnabled"] = settings_.s2InputEnabled;
-    response["temperature1Enabled"] = settings_.temperature1Enabled;
-    response["temperature2Enabled"] = settings_.temperature2Enabled;
-    response["bme680Enabled"] = settings_.bme680Enabled;
-    response["ens160Enabled"] = settings_.ens160Enabled;
-    response["compassEnabled"] = settings_.compassEnabled;
-    response["gpsEnabled"] = settings_.gpsEnabled;
-    response["rtcEnabled"] = settings_.rtcEnabled;
-    response["pn532Enabled"] = settings_.pn532Enabled;
+    DynamicJsonDocument response(kc868a6::config::settingsJsonCapacity);
+    const auto serialized = kc868a6::config::writeSettingsJson(
+        response.to<JsonObject>(), settings());
+    if (!serialized.ok()) {
+        sendSettingsError(serialized, 500);
+        return;
+    }
     String body;
     serializeJson(response, body);
     server_.send(200, "application/json", body);
@@ -531,7 +618,10 @@ void WifiWebUi::handleIfttt(bool save) {
 
         static const char *allowedSources[] = {
             "temperature1", "temperature2", "bmeTemperature", "humidity", "airQuality",
-            "buttonS2", "rf24Packet",
+            "buttonS2",
+#if defined(USE_RADIO_NRF24)
+            "rf24Packet",
+#endif
             "digital1", "digital2", "digital3", "digital4",
             "digital5", "digital6", "digital7", "digital8",
             "analog1", "analog2", "analog3", "analog4"
@@ -543,16 +633,18 @@ void WifiWebUi::handleIfttt(bool save) {
             const uint8_t page = rule["page"] | 0;
             const float threshold = rule["threshold"] | 0.0F;
             const char *action = rule["action"] | "relay";
-            const uint64_t payload = rule["payload"] | 0ULL;
-            const uint64_t packetId = rule["packetId"] | 0ULL;
-            bool sourceAllowed = false;
+            bool sourceAllowed = registry_.findProperty(source) != nullptr;
             for (const char *candidate : allowedSources) {
                 if (strcmp(source, candidate) == 0) sourceAllowed = true;
             }
             const bool comparisonAllowed =
                 strcmp(comparison, ">") == 0 || strcmp(comparison, "<") == 0 ||
                 strcmp(comparison, ">=") == 0 || strcmp(comparison, "<=") == 0 ||
-                strcmp(comparison, "==") == 0 || strcmp(comparison, "!=") == 0;
+                strcmp(comparison, "==") == 0 || strcmp(comparison, "!=") == 0 ||
+                strcmp(comparison, "changed") == 0;
+#if defined(USE_RADIO_NRF24)
+            const uint64_t payload = rule["payload"] | 0ULL;
+            const uint64_t packetId = rule["packetId"] | 0ULL;
             const bool rf24ActionAllowed = payload <= UINT32_MAX;
             uint32_t savedPayload = 0;
             const bool rf24SavedActionAllowed =
@@ -560,11 +652,16 @@ void WifiWebUi::handleIfttt(bool save) {
                 findSavedRf24Packet(preferences_, static_cast<uint32_t>(packetId),
                                     savedPayload) &&
                 savedPayload == payload;
+#endif
             const bool actionAllowed =
                 (strcmp(action, "relay") == 0 && relay >= 1 && relay <= 6) ||
+#if defined(USE_RADIO_NRF24)
                 (strcmp(action, "rf24Send") == 0 && rf24ActionAllowed) ||
                 (strcmp(action, "rf24Saved") == 0 && rf24SavedActionAllowed) ||
+#endif
                 (strcmp(action, "beeper") == 0) ||
+                (strcmp(action, "capability") == 0 &&
+                 kc868a6::web::executeJsonAction(registry_, rule["command"], false).result.ok()) ||
                 (strcmp(action, "oledPage") == 0 && page >= 1 && page <= 3);
             if (!rule["enabled"].is<bool>() || !sourceAllowed ||
                 !comparisonAllowed || !actionAllowed ||
@@ -587,7 +684,7 @@ void WifiWebUi::handleIfttt(bool save) {
 }
 
 void WifiWebUi::handleBluetoothScan() {
-    if (settings_.bluetoothMode != 1 || !bluetoothScanner_) {
+    if (settings().bluetoothMode != 1 || !bluetoothScanner_) {
         server_.send(409, "application/json", "{\"error\":\"ble_scan_disabled\"}");
         return;
     }
@@ -595,9 +692,208 @@ void WifiWebUi::handleBluetoothScan() {
     server_.send(200, "application/json", devices);
 }
 
+void WifiWebUi::loadBluetoothTarget() {
+    if (!preferencesReady_ || !blePresence_) {
+        bleTargetReady_ = false;
+        return;
+    }
+    const String stored = preferences_.getString("ble_target", "");
+    const auto result = blePresence_->setTarget(std::string_view(stored.c_str(), stored.length()), millis());
+    bleTargetReady_ = result.ok();
+    if (!result.ok()) {
+        Serial.printf("ERROR: BLE target load failed: %s\n", kc868a6::core::errorCodeName(result.code));
+    }
+}
+
+void WifiWebUi::handleBluetoothTarget(bool save) {
+    if (!preferencesReady_ || !blePresence_) {
+        sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "ble_target"}, 503);
+        return;
+    }
+    if (save) {
+        StaticJsonDocument<256> request;
+        if (server_.arg("plain").length() > 128 ||
+            deserializeJson(request, server_.arg("plain")) ||
+            !request.is<JsonObject>() || request.size() != 1 ||
+            !request["address"].is<const char *>()) {
+            sendSettingsError({kc868a6::core::ErrorCode::InvalidArgument, "ble_target"}, 400);
+            return;
+        }
+        std::array<char, 18> normalized{};
+        const JsonString address = request["address"].as<JsonString>();
+        const auto valid = kc868a6::peripherals::BlePresence::normalizeTargetMac(
+            std::string_view(address.c_str(), address.size()), normalized);
+        if (!valid.ok()) { sendSettingsError(valid, 400); return; }
+        const String stored(normalized.data());
+        const auto written = preferences_.putString("ble_target", stored);
+        if ((written == 0 && !stored.isEmpty()) ||
+            !preferences_.isKey("ble_target") ||
+            preferences_.getString("ble_target", "!") != stored) {
+            bleTargetReady_ = false;
+            sendSettingsError({kc868a6::core::ErrorCode::StorageWriteFailed, "ble_target"}, 500);
+            return;
+        }
+        const auto applied = blePresence_->setTarget(normalized.data(), millis());
+        bleTargetReady_ = applied.ok();
+        if (!applied.ok()) { sendSettingsError(applied, 500); return; }
+    }
+    if (!bleTargetReady_) {
+        sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "ble_target"}, 503);
+        return;
+    }
+    StaticJsonDocument<256> response;
+    const auto mac = blePresence_->selectedMac();
+    response["address"].set(mac);
+    response["property"] = "ble.presence/in_range";
+    response["timeoutSeconds"] = settings().blePresenceTimeoutSeconds;
+    String body;
+    serializeJson(response, body);
+    server_.send(200, "application/json", body);
+}
+
+void WifiWebUi::loadCurrentInputs() {
+    if (!currentInputs_ || !preferencesReady_) {
+        currentReady_ = false;
+        return;
+    }
+    if (!preferences_.isKey("current_cfg")) return;
+    DynamicJsonDocument document(kc868a6::peripherals::currentJsonCapacity);
+    kc868a6::peripherals::CurrentConfig config;
+    const auto parsed = deserializeJson(document, preferences_.getString("current_cfg"));
+    const auto result = parsed ? kc868a6::core::Result{kc868a6::core::ErrorCode::InvalidArgument, "current_cfg"} :
+        kc868a6::peripherals::readCurrentConfig(document.as<JsonVariantConst>(), config);
+    currentReady_ = result.ok();
+    if (result.ok()) {
+        currentInputs_->configure(config);
+    } else {
+        currentInputs_->unavailable(result.code);
+        Serial.printf("ERROR: current calibration load failed: %s\n", kc868a6::core::errorCodeName(result.code));
+    }
+}
+
+void WifiWebUi::handleCurrentInputs(bool save) {
+    if (!currentInputs_ || !preferencesReady_) {
+        sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "current_cfg"}, 503);
+        return;
+    }
+    DynamicJsonDocument document(kc868a6::peripherals::currentJsonCapacity);
+    if (save) {
+        if (server_.arg("plain").length() > kc868a6::peripherals::currentJsonCapacity) {
+            sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "current_cfg"}, 413);
+            return;
+        }
+        if (deserializeJson(document, server_.arg("plain"))) {
+            sendSettingsError({kc868a6::core::ErrorCode::InvalidArgument, "current_json"}, 400);
+            return;
+        }
+        kc868a6::peripherals::CurrentConfig candidate;
+        const auto valid = kc868a6::peripherals::readCurrentConfig(document.as<JsonVariantConst>(), candidate);
+        if (!valid.ok()) { sendSettingsError(valid, 400); return; }
+        String stored;
+        serializeJson(document, stored);
+        if (preferences_.putString("current_cfg", stored) != stored.length() ||
+            preferences_.getString("current_cfg") != stored) {
+            currentReady_ = false;
+            currentInputs_->unavailable(kc868a6::core::ErrorCode::StorageWriteFailed);
+            sendSettingsError({kc868a6::core::ErrorCode::StorageWriteFailed, "current_cfg"}, 500);
+            return;
+        }
+        const auto applied = currentInputs_->configure(candidate);
+        currentReady_ = applied.ok();
+        if (!applied.ok()) { sendSettingsError(applied, 500); return; }
+    }
+    if (!currentReady_) {
+        sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "current_cfg"}, 503);
+        return;
+    }
+    document.clear();
+    const auto written = kc868a6::peripherals::writeCurrentConfig(document.to<JsonObject>(), currentInputs_->config());
+    if (!written.ok()) { sendSettingsError(written, 500); return; }
+    String body;
+    serializeJson(document, body);
+    server_.send(200, "application/json", body);
+}
+
+void WifiWebUi::loadNetworkConfig() {
+    if (!preferences_.isKey("net_cfg")) return;
+    StaticJsonDocument<512> document;
+    const auto parsed = deserializeJson(document, preferences_.getString("net_cfg"));
+    const auto result = parsed ? kc868a6::core::Result{kc868a6::core::ErrorCode::InvalidArgument, "net_cfg"} :
+        kc868a6::config::readNetworkConfig(document.as<JsonVariantConst>(), networkConfig_);
+    networkReady_ = result.ok();
+    if (!result.ok()) {
+        Serial.printf("ERROR: network configuration load failed: %s\n", kc868a6::core::errorCodeName(result.code));
+    }
+}
+
+void WifiWebUi::handleNetworkConfig(bool save) {
+    if (!preferencesReady_) {
+        sendSettingsError({kc868a6::core::ErrorCode::StorageUnavailable, "network"}, 503);
+        return;
+    }
+    StaticJsonDocument<512> document;
+    if (save) {
+        if (server_.arg("plain").length() > 256 || deserializeJson(document, server_.arg("plain"))) {
+            sendSettingsError({kc868a6::core::ErrorCode::InvalidArgument, "network_json"}, 400);
+            return;
+        }
+        kc868a6::config::NetworkConfig candidate;
+        const auto valid = kc868a6::config::readNetworkConfig(document.as<JsonVariantConst>(), candidate);
+        if (!valid.ok()) { sendSettingsError(valid, 400); return; }
+        document.clear();
+        const auto written = kc868a6::config::writeNetworkConfig(document.to<JsonObject>(), candidate);
+        if (!written.ok()) { sendSettingsError(written, 500); return; }
+        String stored;
+        serializeJson(document, stored);
+        if (preferences_.putString("net_cfg", stored) != stored.length() ||
+            preferences_.getString("net_cfg") != stored) {
+            networkReady_ = false;
+            sendSettingsError({kc868a6::core::ErrorCode::StorageWriteFailed, "net_cfg"}, 500);
+            return;
+        }
+        const bool changed = !networkReady_ || networkConfig_.hostname != candidate.hostname;
+        networkConfig_ = candidate;
+        networkReady_ = true;
+        if (changed) {
+            MDNS.end();
+            mdnsReady_ = false;
+            reconnectPending_ = true;
+            reconnectAt_ = millis() + 1000;
+        }
+    }
+    if (!networkReady_) {
+        sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "network_config"}, 503);
+        return;
+    }
+    document.clear();
+    const auto written = kc868a6::config::writeNetworkConfig(document.to<JsonObject>(), networkConfig_);
+    if (!written.ok()) { sendSettingsError(written, 500); return; }
+    document["mdnsReady"] = mdnsReady_;
+    document["reconnectPending"] = reconnectPending_;
+    document["udpListenAddress"] = "0.0.0.0";
+    document["udpListenPort"] = settings().udpListenPort;
+    document["ip"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+    String body;
+    serializeJson(document, body);
+    server_.send(200, "application/json", body);
+}
+
+void WifiWebUi::startMdns() {
+    MDNS.end();
+    mdnsRetryAt_ = millis() + 5000;
+    mdnsReady_ = MDNS.begin(networkConfig_.hostname.data());
+    if (!mdnsReady_) {
+        Serial.println("ERROR: mDNS responder start failed");
+        return;
+    }
+    MDNS.addService("http", "tcp", 80);
+}
+
 void WifiWebUi::handleRf24Packets(bool save) {
+#if defined(USE_RADIO_NRF24)
     if (!save) {
         DynamicJsonDocument response(4096);
+        response["compiled"] = true;
         DynamicJsonDocument history(2048);
         const String historyJson = radioPacketHistoryProvider_
                                        ? radioPacketHistoryProvider_()
@@ -698,9 +994,18 @@ void WifiWebUi::handleRf24Packets(bool save) {
     String body;
     serializeJson(response, body);
     server_.send(200, "application/json", body);
+#else
+    if (save) {
+        sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "rf24_not_compiled"}, 503);
+    } else {
+        server_.send(200, "application/json",
+                     "{\"compiled\":false,\"available\":false,\"history\":[],\"saved\":[]}");
+    }
+#endif
 }
 
 void WifiWebUi::handleRf24Replay() {
+#if defined(USE_RADIO_NRF24)
     DynamicJsonDocument request(128);
     if (deserializeJson(request, server_.arg("plain")) ||
         !request["id"].is<uint32_t>()) {
@@ -721,6 +1026,9 @@ void WifiWebUi::handleRf24Replay() {
         return;
     }
     server_.send(200, "application/json", "{\"ok\":true}");
+#else
+    sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "rf24_not_compiled"}, 503);
+#endif
 }
 
 void WifiWebUi::reconnectWithSavedCredentials() {
@@ -734,8 +1042,11 @@ void WifiWebUi::reconnectWithSavedCredentials() {
     }
     WiFi.softAPdisconnect(true);
     setupAccessPoint_ = false;
+    MDNS.end();
+    mdnsReady_ = false;
+    WiFi.disconnect(false, false);
     if (connectToWifi(ssid, password)) {
-        MDNS.begin("kc868-a6");
+        startMdns();
         Serial.printf("Wi-Fi connected: %s\n", WiFi.localIP().toString().c_str());
     } else {
         startSetupAccessPoint();
@@ -748,5 +1059,12 @@ void WifiWebUi::loop() {
     if (reconnectPending_ &&
         static_cast<int32_t>(millis() - reconnectAt_) >= 0) {
         reconnectWithSavedCredentials();
+    }
+    if (WiFi.status() != WL_CONNECTED || setupAccessPoint_) {
+        if (mdnsReady_) MDNS.end();
+        mdnsReady_ = false;
+    } else if (!mdnsReady_ && networkReady_ && !reconnectPending_ &&
+               static_cast<int32_t>(millis() - mdnsRetryAt_) >= 0) {
+        startMdns();
     }
 }

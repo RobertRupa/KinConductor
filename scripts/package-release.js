@@ -1,0 +1,105 @@
+"use strict";
+const fs = require("node:fs");
+const path = require("node:path");
+const crypto = require("node:crypto");
+const { execFileSync } = require("node:child_process");
+
+function parsePartitions(csv) {
+  const partitions = csv.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#")).map((line) => {
+    const [name, type, subtype, offset, size] = line.split(",").map((value) => value.trim());
+    if (!name || !type || !subtype || !/^(0x[0-9a-f]+|\d+)$/i.test(offset) ||
+        !/^(0x[0-9a-f]+|\d+)$/i.test(size)) throw new Error("Invalid explicit partition layout");
+    return { name, type, subtype, offset: Number(offset), size: Number(size) };
+  });
+  const ordered = [...partitions].sort((a, b) => a.offset - b.offset);
+  for (let i = 0; i < ordered.length; i++) {
+    if (ordered[i].size <= 0 || ordered[i].offset + ordered[i].size > 4 * 1048576 ||
+        (i && ordered[i - 1].offset + ordered[i - 1].size > ordered[i].offset)) {
+      throw new Error("Overlapping or out-of-bounds partitions");
+    }
+  }
+  if (new Set(partitions.map((part) => part.name)).size !== partitions.length) throw new Error("Duplicate partitions");
+  return partitions;
+}
+
+function packageRelease({ root, profile, version, commit, outputRoot }) {
+  if (!["kc868-a6", "kc868-a6-coprocessor"].includes(profile)) throw new Error("Unsupported release profile");
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("Version must be major.minor.patch");
+  if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error("Commit must be a full SHA-1");
+  const metadata = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  if (metadata.version !== version ||
+      !fs.readFileSync(path.join(root, "platformio.ini"), "utf8").includes(`KINCONDUCTOR_VERSION=\\"${version}\\"`)) {
+    throw new Error("Release version differs from package or firmware metadata");
+  }
+  const partitions = parsePartitions(fs.readFileSync(path.join(root, "partitions.csv"), "utf8"));
+  const app = partitions.find((part) => part.type === "app" && part.subtype === "ota_0");
+  const otherApp = partitions.find((part) => part.type === "app" && part.subtype === "ota_1");
+  const filesystem = partitions.find((part) => part.name === "littlefs");
+  const otaData = partitions.find((part) => part.subtype === "ota");
+  if (!app || !otherApp || !filesystem || !otaData || app.size !== otherApp.size ||
+      app.offset !== 0x10000 || otaData.offset !== 0xe000 || otaData.size !== 0x2000) {
+    throw new Error("Unsupported factory/OTA partition layout");
+  }
+  const build = path.join(root, ".pio", "build", profile);
+  const firmware = fs.readFileSync(path.join(build, "firmware.bin"));
+  const factory = fs.readFileSync(path.join(build, "firmware.factory.bin"));
+  const littlefs = fs.readFileSync(path.join(build, "littlefs.bin"));
+  const bootloader = fs.readFileSync(path.join(build, "bootloader.bin"));
+  const table = fs.readFileSync(path.join(build, "partitions.bin"));
+  if (!firmware.length || firmware.length > app.size) throw new Error("Firmware exceeds OTA slot");
+  if (littlefs.length !== filesystem.size) throw new Error("LittleFS image differs from partition size");
+  if (!bootloader.length || bootloader.length > 0x7000 || table.length !== 0xc00 ||
+      factory.length !== app.offset + firmware.length ||
+      !factory.subarray(app.offset).equals(firmware) ||
+      !factory.subarray(0x1000, 0x1000 + bootloader.length).equals(bootloader) ||
+      !factory.subarray(0x8000, 0x8000 + table.length).equals(table)) {
+    throw new Error("Factory image does not match firmware/bootloader/partition artifacts");
+  }
+  const images = [
+    ["firmware.bin", firmware, "ota-application", app.offset],
+    ["firmware.factory.bin", factory, "factory-without-filesystem", 0],
+    ["littlefs.bin", littlefs, "filesystem", filesystem.offset],
+    ["bootloader.bin", bootloader, "bootloader", 0x1000],
+    ["partitions.bin", table, "partition-table", 0x8000],
+    ["boot_app0.bin", factory.subarray(otaData.offset, otaData.offset + otaData.size), "initial-ota-data", otaData.offset]
+  ];
+  const manifest = {
+    schemaVersion: 1, project: "KinConductor", version, tag: `v${version}`, commit, profile,
+    flashBytes: 4 * 1048576, otaSlotBytes: app.size,
+    firmwareBytes: firmware.length, otaRemainingBytes: app.size - firmware.length,
+    rf24: false, partitions,
+    files: images.map(([name, data, role, offset]) => ({
+      name, role, offset, bytes: data.length,
+      sha256: crypto.createHash("sha256").update(data).digest("hex")
+    }))
+  };
+  const output = path.join(outputRoot, profile);
+  fs.mkdirSync(output, { recursive: true });
+  for (const [name, data] of images) fs.writeFileSync(path.join(output, name), data);
+  fs.writeFileSync(path.join(output, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+  fs.writeFileSync(path.join(output, "SHA256SUMS"), manifest.files.map((file) => `${file.sha256}  ${file.name}`).join("\n") + "\n");
+  fs.writeFileSync(path.join(output, "README.txt"), [
+    `KinConductor v${version} / ${profile} / ${commit}`,
+    "Both matching firmware and LittleFS are required. Verify SHA256SUMS before flashing.",
+    "Select the base kc868-a6 for a board without a coprocessor. Both profiles omit RF24.",
+    "Disconnect unsafe loads and confirm the board/serial port before a reset.",
+    "Routine update: use PlatformIO upload then uploadfs, preserving NVS and partition layout.",
+    "firmware.bin is the OTA application; its serial offset targets app0, NOT the automatically selected inactive OTA slot.",
+    "firmware.factory.bin is merged from offset 0 and DOES NOT include LittleFS.",
+    "Factory flashing can overwrite NVS padding and OTA metadata. Use only for intentional provisioning, not routine updates.",
+    "Never erase flash/NVS or flash a factory image to preserve existing credentials/calibration.",
+    "littlefs.bin replaces the web-assets filesystem. Offsets and SHA256 hashes are in manifest.json.",
+    "P17/custom coprocessor protocols and automatic electrical calibration are not implemented.",
+    ""
+  ].join("\n"));
+  return { output, manifest };
+}
+if (require.main === module) {
+  const [profile, tag] = process.argv.slice(2);
+  const root = process.cwd();
+  const version = (tag || JSON.parse(fs.readFileSync("package.json", "utf8")).version).replace(/^v/, "");
+  const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const result = packageRelease({ root, profile, version, commit, outputRoot: path.join(root, "dist", "releases", `v${version}`) });
+  console.log(`${result.output}: ${result.manifest.firmwareBytes} application bytes, ${result.manifest.otaRemainingBytes} OTA bytes remaining`);
+}
+module.exports = { parsePartitions, packageRelease };

@@ -12,9 +12,26 @@
 #include <TinyGPSPlus.h>
 #include <OneWire.h>
 #include <Wire.h>
+#include <Fonts/FreeSans9pt7b.h>
+#include <Fonts/FreeMono9pt7b.h>
 
 #include "kc868_a6_pins.h"
 #include "wifi_web_ui.h"
+#include "core/peripheral_registry.h"
+#include "peripherals/analog_inputs.h"
+#include "web/analog_status.h"
+#include "config/preferences_settings_store.h"
+#include "board/settings_resources.h"
+#include "peripherals/board_io.h"
+#include "peripherals/sensor_readings.h"
+#include "web/capabilities.h"
+#include "peripherals/fan_control.h"
+#include "core/ifttt_condition.h"
+#include "peripherals/ble_presence.h"
+#include "peripherals/esp32_ble_presence_scanner.h"
+#include "peripherals/transport.h"
+#include "peripherals/esp32_transport.h"
+#include "peripherals/current_inputs.h"
 
 #if defined(USE_RADIO_NRF24)
 #include <RF24.h>
@@ -25,16 +42,18 @@ namespace {
 constexpr uint8_t screenWidth = 128;
 constexpr uint8_t screenHeight = 64;
 constexpr uint32_t reportIntervalMs = 1000;
-constexpr uint64_t nrf24PipeAddress = 0xE8E8F0F0E1LL;
-constexpr uint8_t rf24HistoryCapacity = 16;
 constexpr uint8_t eventLogCapacity = 24;
 constexpr uint32_t s2DebounceMs = 120;
 
+#if defined(USE_RADIO_NRF24)
+constexpr uint64_t nrf24PipeAddress = 0xE8E8F0F0E1LL;
+constexpr uint8_t rf24HistoryCapacity = 16;
 struct CapturedRf24Packet {
     uint32_t payload = 0;
     uint32_t receivedAtMs = 0;
     uint32_t sequence = 0;
 };
+#endif
 
 struct DeviceLogEvent {
     uint32_t timestampMs = 0;
@@ -52,11 +71,100 @@ DallasTemperature temperature1(&oneWire1);
 DallasTemperature temperature2(&oneWire2);
 DHT dht32(kc868a6::gpio::sensor1, DHT22);
 DHT dht33(kc868a6::gpio::sensor2, DHT22);
-WifiWebUi webUi;
-
-#if defined(USE_RADIO_NRF24) && defined(USE_RADIO_LORA)
-#error "Select only one radio: nRF24 and SX1278 share the board CS pin"
+#if defined(USE_GPS)
+constexpr auto defaultUart1Mode = kc868a6::config::Uart1Mode::Gps;
+#elif defined(USE_ZIGBEE_THREAD_COPROCESSOR)
+constexpr auto defaultUart1Mode = kc868a6::config::Uart1Mode::Coprocessor;
+#else
+constexpr auto defaultUart1Mode = kc868a6::config::Uart1Mode::Serial;
 #endif
+kc868a6::config::PreferencesSettingsStore settingsStore;
+kc868a6::board::BoardSettingsValidator boardValidator{
+    kc868a6::board::compiledBoardOptions()};
+kc868a6::config::ConfigService configuration{
+    settingsStore, kc868a6::config::defaultSettings(defaultUart1Mode), &boardValidator};
+kc868a6::core::PeripheralRegistry peripheralRegistry;
+WifiWebUi webUi{configuration, peripheralRegistry};
+
+class Esp32AnalogInputHardware final
+    : public kc868a6::peripherals::IAnalogInputHardware {
+public:
+    kc868a6::core::Result begin() override {
+        analogReadResolution(12);
+        for (uint8_t pin : kc868a6::gpio::analogInputs) pinMode(pin, INPUT);
+        return {};
+    }
+
+    kc868a6::core::Result read(uint8_t pin, uint16_t &value) override {
+        value = analogRead(pin);
+        return {};
+    }
+};
+
+Esp32AnalogInputHardware analogHardware;
+kc868a6::peripherals::AnalogInputs analogInputs{
+    analogHardware, {kc868a6::gpio::analogInputs[0], kc868a6::gpio::analogInputs[1],
+                     kc868a6::gpio::analogInputs[2], kc868a6::gpio::analogInputs[3]}};
+kc868a6::core::ActionResult writeRelayHardware(uint8_t channel, bool on);
+bool readExpander(uint8_t address, uint8_t &state);
+class Esp32BoardIoHardware final : public kc868a6::peripherals::IBoardIoHardware {
+public:
+    kc868a6::core::Result readInputs(uint8_t &bits) override {
+        return readExpander(kc868a6::i2c::inputExpanderAddress, bits)
+            ? kc868a6::core::Result{}
+            : kc868a6::core::Result{kc868a6::core::ErrorCode::OperationFailed, "inputs"};
+    }
+    kc868a6::core::Result readRelays(uint8_t &bits) override {
+        return readExpander(kc868a6::i2c::relayExpanderAddress, bits)
+            ? kc868a6::core::Result{}
+            : kc868a6::core::Result{kc868a6::core::ErrorCode::OperationFailed, "relays"};
+    }
+    kc868a6::core::ActionResult writeRelay(uint8_t channel, bool on) override {
+        return writeRelayHardware(channel, on);
+    }
+};
+Esp32BoardIoHardware ioHardware;
+kc868a6::peripherals::BoardIo boardIo{ioHardware};
+kc868a6::peripherals::SensorReadings sensorReadings;
+
+class Esp32FanHardware final : public kc868a6::peripherals::IFanHardware {
+public:
+    kc868a6::core::Result configure(bool enabled, uint8_t pin, uint16_t frequency) override {
+        if (attached_) {
+            const bool stopped = ledcWrite(pin_, 0);
+            const bool detached = ledcDetach(pin_);
+            attached_ = !detached;
+            if (!stopped || !detached) {
+                return {kc868a6::core::ErrorCode::OperationFailed, "fan_detach"};
+            }
+            digitalWrite(pin_, LOW);
+        }
+        pin_ = pin;
+        if (!enabled) return {};
+        dacDisable(pin_);
+        attached_ = ledcAttachChannel(pin_, frequency, 8, 4);
+        if (!attached_ || !ledcWrite(pin_, 0)) {
+            return {kc868a6::core::ErrorCode::OperationFailed, "fan_ledc"};
+        }
+        return {};
+    }
+    kc868a6::core::Result write(uint8_t percent) override {
+        if (!attached_) return {kc868a6::core::ErrorCode::Unavailable, "fan_ledc"};
+        return ledcWrite(pin_, (percent * 255U + 50U) / 100U)
+            ? kc868a6::core::Result{}
+            : kc868a6::core::Result{kc868a6::core::ErrorCode::OperationFailed, "fan_write"};
+    }
+private:
+    bool attached_ = false;
+    uint8_t pin_ = 25;
+};
+Esp32FanHardware fanHardware;
+kc868a6::peripherals::FanControl fanControl{fanHardware};
+kc868a6::peripherals::Esp32BlePresenceScanner bleScanner;
+kc868a6::peripherals::BlePresence blePresence{bleScanner};
+kc868a6::peripherals::Esp32TransportHardware transportHardware{Serial1, Serial2};
+kc868a6::peripherals::Transport transport{transportHardware};
+kc868a6::peripherals::CurrentInputs currentInputs{peripheralRegistry};
 
 #if defined(USE_RADIO_NRF24)
 RF24 nrf24(kc868a6::gpio::nrf24Ce, kc868a6::gpio::spiCs);
@@ -75,18 +183,22 @@ bool temperature2Ready = false;
 float sensorHumidity[2] = {NAN, NAN};
 bool radioReady = false;
 bool bluetoothReady = false;
+uint8_t configuredBluetoothMode = 255;
+#if defined(USE_RADIO_NRF24)
 uint32_t lastRf24Packet = 0;
 bool rf24PacketAvailable = false;
 CapturedRf24Packet rf24History[rf24HistoryCapacity] = {};
 uint8_t rf24HistoryNext = 0;
 uint8_t rf24HistoryCount = 0;
 uint32_t rf24Sequence = 0;
+#endif
 DeviceLogEvent eventLog[eventLogCapacity] = {};
 uint8_t eventLogNext = 0;
 uint8_t eventLogCount = 0;
 uint8_t detectedI2cAddresses[112] = {};
 uint8_t detectedI2cCount = 0;
 bool beeperPwmAttached = false;
+uint8_t configuredBeeperPin = 26;
 bool beeperActive = false;
 uint16_t configuredBeeperFrequencyHz = 0;
 bool s2Pressed = false;
@@ -95,7 +207,7 @@ uint32_t s2CandidateSinceMs = 0;
 uint32_t beeperStopAt = 0;
 uint8_t relayOutputBits = 0xFF;
 uint8_t latestInputState = 0xFF;
-uint16_t analogReadings[kc868a6::analogInputCount] = {};
+const auto &analogReadings = analogInputs.rawValues();
 float temperatureValues[2] = {NAN, NAN};
 float airTemperature = NAN;
 float airHumidity = NAN;
@@ -116,11 +228,14 @@ uint32_t lastDisplayPageMs = 0;
 uint8_t currentDisplayPage = 1;
 uint8_t iftttDisplayPage = 0;
 String iftttRulesJson = "[]";
-bool iftttPreviousMatches[4] = {};
+kc868a6::core::ConditionState iftttConditions[4] = {};
+uint32_t lastIftttMs = 0;
 
 void configureBluetooth(uint8_t mode);
 String scanBluetoothDevices();
+#if defined(USE_RADIO_NRF24)
 bool sendNrf24Packet(uint32_t payload);
+#endif
 
 void recordEvent(const String &message) {
     DeviceLogEvent &event = eventLog[eventLogNext];
@@ -130,6 +245,19 @@ void recordEvent(const String &message) {
     if (eventLogCount < eventLogCapacity) ++eventLogCount;
 }
 
+void reportCoreError(const kc868a6::core::Result &result) {
+    if (result.ok()) return;
+    const String subject = result.subject.empty()
+                               ? String()
+                               : String(result.subject.data(), result.subject.size());
+    const String message =
+        String("Core: ") + kc868a6::core::errorCodeName(result.code) + " (" +
+        subject + ")";
+    Serial.println("ERROR: " + message);
+    recordEvent(message);
+}
+
+#if defined(USE_RADIO_NRF24)
 void captureRf24Packet(uint32_t payload) {
     rf24History[rf24HistoryNext] = {payload, millis(), ++rf24Sequence};
     rf24HistoryNext = (rf24HistoryNext + 1) % rf24HistoryCapacity;
@@ -138,12 +266,8 @@ void captureRf24Packet(uint32_t payload) {
 
 String radioMonitorJson() {
     DynamicJsonDocument document(1536);
-    document["available"] =
-#if defined(USE_RADIO_NRF24)
-        radioReady;
-#else
-        false;
-#endif
+    document["available"] = radioReady;
+    document["compiled"] = true;
     document["channel"] = 76;
     document["pipe"] = "E8E8F0F0E1";
     JsonArray packets = document["history"].to<JsonArray>();
@@ -160,6 +284,7 @@ String radioMonitorJson() {
     serializeJson(document, result);
     return result;
 }
+#endif
 
 bool writeExpander(uint8_t address, uint8_t value) {
     Wire.beginTransmission(address);
@@ -231,16 +356,19 @@ void initializeRelays() {
     Serial.println("Relay outputs initialized OFF");
 }
 
-bool setRelay(uint8_t channel, bool on) {
-    if (channel >= kc868a6::relayCount) return false;
+kc868a6::core::ActionResult writeRelayHardware(uint8_t channel, bool on) {
+    if (channel >= kc868a6::relayCount) return {{kc868a6::core::ErrorCode::InvalidArgument, "channel"}};
 
     const uint8_t mask = static_cast<uint8_t>(1U << channel);
     uint8_t nextState = relayOutputBits;
     uint8_t hardwareState = 0;
-    if (readExpander(kc868a6::i2c::relayExpanderAddress, hardwareState)) {
-        relayOutputBits = hardwareState;
-        nextState = hardwareState;
+    if (!readExpander(kc868a6::i2c::relayExpanderAddress, hardwareState)) {
+        recordEvent("GPIO: relay read failed; write aborted.");
+        return {{kc868a6::core::ErrorCode::OperationFailed, "relay_read"}};
     }
+    relayOutputBits = hardwareState;
+    nextState = hardwareState;
+    nextState |= kc868a6::board::relayReservedPortMask;
     if (kc868a6::relayActiveLow == on) {
         nextState &= static_cast<uint8_t>(~mask);
     } else {
@@ -249,7 +377,7 @@ bool setRelay(uint8_t channel, bool on) {
     relayExpanderReady = writeExpander(kc868a6::i2c::relayExpanderAddress,
                                        nextState);
     if (!relayExpanderReady) {
-        return false;
+        return {{kc868a6::core::ErrorCode::OperationFailed, "relay_write"}};
     }
     relayOutputBits = nextState;
     uint8_t verifiedState = 0;
@@ -261,16 +389,37 @@ bool setRelay(uint8_t channel, bool on) {
                                     : (verifiedState & mask) != 0;
         if (verifiedOn != on) {
             recordEvent("GPIO: błąd weryfikacji przekaźnika " + String(channel + 1));
-            return false;
+            return {{kc868a6::core::ErrorCode::OperationFailed, "relay_readback"}, true, false};
         }
+    } else {
+        recordEvent("GPIO: relay write applied but readback failed.");
+        return {{kc868a6::core::ErrorCode::OperationFailed, "relay_readback"}, true, false};
     }
     recordEvent("GPIO: przekaźnik " + String(channel + 1) +
                 (on ? " włączony" : " wyłączony"));
-    return true;
+    return {{}, true, true};
+}
+
+bool setRelay(uint8_t channel, bool on) {
+    std::array<kc868a6::core::Parameter, 2> parameters{{
+        {"channel", static_cast<uint32_t>(channel + 1)}, {"on", on},
+    }};
+    const auto action = peripheralRegistry.execute("io.main/relay/set", parameters);
+    reportCoreError(action.result);
+    return action.result.ok() && action.applied;
 }
 
 String deviceStatusJson() {
     DynamicJsonDocument document(6144);
+    JsonObject configStatus = document["configuration"].to<JsonObject>();
+    if (configStatus.isNull() ||
+        !configStatus["ready"].set(configuration.ready()) ||
+        !configStatus["error"].set(
+            kc868a6::core::errorCodeName(configuration.status().code))) {
+        reportCoreError({kc868a6::core::ErrorCode::CapacityExceeded,
+                         "configuration_status"});
+        return String();
+    }
     document["relays"].to<JsonArray>();
     JsonArray relays = document["relays"].as<JsonArray>();
     for (uint8_t channel = 0; channel < kc868a6::relayCount; ++channel) {
@@ -284,7 +433,11 @@ String deviceStatusJson() {
     }
 
     JsonArray analog = document["analog"].to<JsonArray>();
-    for (uint8_t value : analogReadings) analog.add(value);
+    const auto analogStatus = kc868a6::web::appendAnalogStatus(analog, analogInputs);
+    if (!analogStatus.ok()) {
+        reportCoreError(analogStatus);
+        return String();
+    }
 
     JsonArray temperatures = document["temperatures"].to<JsonArray>();
     temperatures.add(temperatureValues[0] > -100 ? temperatureValues[0] : NAN);
@@ -334,9 +487,11 @@ String deviceStatusJson() {
     addDevice("inputExpander", "Input expander", "I2C 0x22", inputExpanderReady);
     addDevice("oled", "SSD1306 OLED", "I2C 0x3C · SDA GPIO4 / SCL GPIO15", displayReady)
         ["detected"] = wasI2cAddressDetected(kc868a6::i2c::oledAddress);
-    addDevice("temperature1", settings.gpio32SensorType == 2 ? "DHT22" : "DS18B20",
+    addDevice("temperature1", settings.gpio32SensorType == 3 ? "DHT11" :
+              settings.gpio32SensorType == 2 ? "DHT22" : "DS18B20",
               "GPIO32", temperature1Ready && isfinite(temperatureValues[0]));
-    addDevice("temperature2", settings.gpio33SensorType == 2 ? "DHT22" : "DS18B20",
+    addDevice("temperature2", settings.gpio33SensorType == 3 ? "DHT11" :
+              settings.gpio33SensorType == 2 ? "DHT22" : "DS18B20",
               "GPIO33", temperature2Ready && isfinite(temperatureValues[1]));
     addDevice("rtc", "DS3231 RTC", "I2C 0x68", rtcReady);
     addDevice("bme680", "BME680", "I2C 0x77 · SDA GPIO4 / SCL GPIO15", bme680Ready);
@@ -391,12 +546,35 @@ String deviceStatusJson() {
     beeper["frequencyHz"] = settings.beeperFrequencyHz;
     beeper["durationMs"] = settings.beeperDurationMs;
 
+#if defined(USE_RADIO_NRF24)
+    document["features"]["rf24"] = true;
     JsonObject radio = document["rf24"].to<JsonObject>();
     radio["available"] = radioReady;
     radio["packetAvailable"] = rf24PacketAvailable;
     radio["lastPacket"] = lastRf24Packet;
     radio["receivedCount"] = rf24Sequence;
     radio["pipe"] = "E8E8F0F0E1";
+#else
+    document["features"]["rf24"] = false;
+#endif
+    document["memory"]["freeHeap"] = ESP.getFreeHeap();
+    document["memory"]["minFreeHeap"] = ESP.getMinFreeHeap();
+    auto hardware = document["hardware"].to<JsonObject>();
+    hardware["cpu"]["model"] = ESP.getChipModel();
+    hardware["cpu"]["cores"] = ESP.getChipCores();
+    hardware["cpu"]["frequencyMHz"] = ESP.getCpuFreqMHz();
+    hardware["cpu"]["revision"] = ESP.getChipRevision();
+    hardware["ram"]["heapBytes"] = ESP.getHeapSize();
+    hardware["ram"]["freeBytes"] = ESP.getFreeHeap();
+    hardware["ram"]["minFreeBytes"] = ESP.getMinFreeHeap();
+    hardware["psram"]["totalBytes"] = ESP.getPsramSize();
+    hardware["psram"]["freeBytes"] = ESP.getFreePsram();
+    hardware["flash"]["totalBytes"] = ESP.getFlashChipSize();
+    hardware["flash"]["frequencyHz"] = ESP.getFlashChipSpeed();
+    hardware["flash"]["firmwareBytes"] = ESP.getSketchSize();
+    hardware["flash"]["otaSlotBytes"] = ESP.getFreeSketchSpace();
+    hardware["firmwareVersion"] = KINCONDUCTOR_VERSION;
+    document["beeper"]["pin"] = settings.beeperPin;
 
     JsonObject bluetooth = document["bluetooth"].to<JsonObject>();
     bluetooth["mode"] = settings.bluetoothMode;
@@ -412,6 +590,10 @@ String deviceStatusJson() {
     }
 
     String result;
+    if (document.overflowed()) {
+        Serial.println("ERROR: device status exceeds JSON capacity");
+        return "";
+    }
     serializeJson(document, result);
     return result;
 }
@@ -434,8 +616,9 @@ void configureTemperaturePin(uint8_t sensorType, uint8_t pin,
         oneWireSensor.begin();
         oneWireSensor.setWaitForConversion(false);
         ready = oneWireSensor.getDeviceCount() > 0;
-    } else if (sensorType == 2) {
+    } else if (sensorType == 2 || sensorType == 3) {
         pinMode(pin, INPUT);
+        dhtSensor = DHT(pin, sensorType == 3 ? DHT11 : DHT22);
         dhtSensor.begin();
         ready = true;
         const uint8_t sensorIndex = pin == kc868a6::gpio::sensor1 ? 0 : 1;
@@ -444,37 +627,38 @@ void configureTemperaturePin(uint8_t sensorType, uint8_t pin,
 }
 
 void configureBeeper(const DeviceSettings &settings) {
-    if (!settings.beeperEnabled) {
-        if (beeperPwmAttached) {
-            ledcWriteTone(kc868a6::gpio::dac1, 0);
-            ledcWrite(kc868a6::gpio::dac1, 0);
-            ledcDetach(kc868a6::gpio::dac1);
-            beeperPwmAttached = false;
-        }
-        configuredBeeperFrequencyHz = 0;
-        beeperActive = false;
-        dacWrite(kc868a6::gpio::dac1, 0);
-        return;
-    }
-
     if (beeperPwmAttached &&
-        configuredBeeperFrequencyHz != settings.beeperFrequencyHz) {
-        ledcWriteTone(kc868a6::gpio::dac1, 0);
-        ledcDetach(kc868a6::gpio::dac1);
+        (!settings.beeperEnabled || configuredBeeperPin != settings.beeperPin ||
+         configuredBeeperFrequencyHz != settings.beeperFrequencyHz)) {
+        ledcWriteTone(configuredBeeperPin, 0);
+        ledcWrite(configuredBeeperPin, 0);
+        if (!ledcDetach(configuredBeeperPin)) {
+            Serial.println("ERROR: beeper LEDC detach failed");
+            recordEvent("Buzzer: LEDC detach failed.");
+            return;
+        }
+        digitalWrite(configuredBeeperPin, LOW);
         beeperPwmAttached = false;
         beeperActive = false;
     }
+    if (!settings.beeperEnabled) {
+        configuredBeeperFrequencyHz = 0;
+        beeperActive = false;
+        return;
+    }
     if (!beeperPwmAttached) {
-        beeperPwmAttached = ledcAttach(kc868a6::gpio::dac1,
-                                       settings.beeperFrequencyHz, 8);
+        configuredBeeperPin = settings.beeperPin;
+        dacDisable(configuredBeeperPin);
+        beeperPwmAttached = ledcAttachChannel(configuredBeeperPin,
+                                       settings.beeperFrequencyHz, 8, 6);
         if (!beeperPwmAttached) {
-            Serial.println("ERROR: could not attach LEDC to beeper GPIO26");
-            recordEvent("Buzzer: błąd inicjalizacji LEDC GPIO26.");
+            Serial.println("ERROR: could not attach LEDC to beeper");
+            recordEvent("Buzzer: błąd inicjalizacji LEDC.");
             return;
         }
         configuredBeeperFrequencyHz = settings.beeperFrequencyHz;
     }
-    if (!beeperActive) ledcWrite(kc868a6::gpio::dac1, 0);
+    if (!beeperActive) ledcWrite(configuredBeeperPin, 0);
 }
 
 bool setDisplayContrast(uint8_t contrast) {
@@ -576,10 +760,16 @@ void initializePeripherals() {
     Serial2.begin(9600, SERIAL_8N1, kc868a6::gpio::rs485Rx,
                   kc868a6::gpio::rs485Tx);
 
-    analogReadResolution(12);
-    for (uint8_t pin : kc868a6::gpio::analogInputs) {
-        pinMode(pin, INPUT);
-    }
+    const auto registered = peripheralRegistry.add(
+        {&analogInputs, &analogInputs, &analogInputs, nullptr});
+    reportCoreError(registered);
+    reportCoreError(peripheralRegistry.add({&boardIo, &boardIo, &boardIo, &boardIo}));
+    reportCoreError(peripheralRegistry.add({&sensorReadings, &sensorReadings, &sensorReadings, nullptr}));
+    reportCoreError(peripheralRegistry.add({&fanControl, &fanControl, &fanControl, &fanControl}));
+    reportCoreError(peripheralRegistry.add({&blePresence, &blePresence, &blePresence, nullptr}));
+    reportCoreError(peripheralRegistry.add({&transport, &transport, &transport, &transport}));
+    reportCoreError(peripheralRegistry.add({&currentInputs, &currentInputs, &currentInputs, nullptr}));
+    if (registered.ok()) reportCoreError(peripheralRegistry.begin(millis()));
 
     pinMode(kc868a6::gpio::sensor1, INPUT);
     pinMode(kc868a6::gpio::sensor2, INPUT);
@@ -627,6 +817,11 @@ void applyDeviceSettings(const DeviceSettings &settings) {
     Serial2.end();
     Serial2.begin(settings.rs485Baud, SERIAL_8N1,
                   kc868a6::gpio::rs485Rx, kc868a6::gpio::rs485Tx);
+    kc868a6::peripherals::TransportConfig transportConfig;
+    transportConfig.udpListenPort = settings.udpListenPort;
+    transportConfig.serial1Reserved = settings.uart1Mode != 0;
+    reportCoreError(transport.configure(transportConfig, millis()));
+    reportCoreError(blePresence.setTimeoutMs(settings.blePresenceTimeoutSeconds * 1000UL));
 
     configureTemperaturePin(settings.gpio32SensorType, kc868a6::gpio::sensor1,
                             temperature1, dht32, temperature1Ready);
@@ -648,7 +843,10 @@ void applyDeviceSettings(const DeviceSettings &settings) {
         s2Pressed = false;
         s2CandidatePressed = false;
     }
+    reportCoreError(fanControl.configure(false, settings.fanPin, settings.fanFrequencyHz, millis()));
     configureBeeper(settings);
+    reportCoreError(fanControl.configure(settings.fanEnabled, settings.fanPin,
+                                         settings.fanFrequencyHz, millis()));
 }
 
 bool startBeeperTest() {
@@ -663,7 +861,7 @@ bool startBeeperTest() {
         return false;
     }
 
-    ledcWriteTone(kc868a6::gpio::dac1, settings.beeperFrequencyHz);
+    ledcWriteTone(configuredBeeperPin, settings.beeperFrequencyHz);
     beeperActive = true;
     beeperStopAt = millis() + settings.beeperDurationMs;
     recordEvent("Buzzer: test uruchomiony.");
@@ -671,62 +869,87 @@ bool startBeeperTest() {
 }
 
 void configureBluetooth(uint8_t mode) {
-    if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
+    if (configuredBluetoothMode == mode && (mode == 0 || bluetoothReady)) return;
+    blePresence.setScanAvailable(false, millis());
+    if (NimBLEDevice::isInitialized() && !NimBLEDevice::deinit(true)) {
+        bluetoothReady = false;
+        reportCoreError({kc868a6::core::ErrorCode::OperationFailed, "ble_deinit"});
+        return;
+    }
     bluetoothReady = false;
+    configuredBluetoothMode = mode;
     if (mode == 0) return;
 
     bluetoothReady = NimBLEDevice::init("KC868-A6");
-    if (!bluetoothReady) return;
-    if (mode == 1) {
-        NimBLEDevice::getScan()->setActiveScan(true);
-    } else if (mode == 2) {
+    if (!bluetoothReady) {
+        reportCoreError({kc868a6::core::ErrorCode::OperationFailed, "ble_init"});
+        return;
+    }
+    if (mode == 2) {
         NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
         advertising->setName("KC868-A6");
-        advertising->start();
+        if (!advertising->start()) {
+            reportCoreError({kc868a6::core::ErrorCode::OperationFailed, "ble_advertise"});
+            bluetoothReady = false;
+        }
     }
+    blePresence.setScanAvailable(mode == 1 && bluetoothReady, millis());
 }
 
 String scanBluetoothDevices() {
-    DynamicJsonDocument document(3072);
+    DynamicJsonDocument document(6144);
     JsonArray devices = document["devices"].to<JsonArray>();
     if (webUi.settings().bluetoothMode != 1 || !bluetoothReady) {
         document["error"] = "ble_scan_disabled";
     } else {
-        NimBLEScan *scanner = NimBLEDevice::getScan();
-        scanner->setMaxResults(24);
-        const NimBLEScanResults results = scanner->getResults(2500, false);
-        for (int index = 0; index < results.getCount() && index < 24; ++index) {
-            const NimBLEAdvertisedDevice *advertised = results.getDevice(index);
-            if (!advertised) continue;
-            JsonObject device = devices.createNestedObject();
-            const std::string name = advertised->getName();
-            const std::string address = advertised->getAddress().toString();
-            device["name"] = name.empty() ? "(unnamed)" : name.c_str();
-            device["address"] = address.c_str();
-            device["rssi"] = advertised->getRSSI();
+        kc868a6::peripherals::BleScanSnapshot scan;
+        const auto result = blePresence.scanResults(millis(), scan);
+        reportCoreError(result);
+        if (!result.ok()) {
+            document["error"] = kc868a6::core::errorCodeName(result.code);
+        } else {
+            for (size_t index = 0; index < scan.count; ++index) {
+                const auto &item = scan.devices[index];
+                JsonObject device = devices.createNestedObject();
+                const auto mac = kc868a6::peripherals::BlePresence::formatMac(item.address);
+                device["name"] = item.name[0] ? item.name.data() : "(unnamed)";
+                device["address"] = mac.data();
+                device["rssi"] = item.rssi;
+            }
         }
-        scanner->clearResults();
+    }
+    if (document.overflowed()) {
+        reportCoreError({kc868a6::core::ErrorCode::CapacityExceeded, "ble_scan_json"});
+        return "{\"error\":\"capacity_exceeded\",\"devices\":[]}";
     }
     String response;
     serializeJson(document, response);
     return response;
 }
 
-bool sendNrf24Packet(uint32_t payload) {
 #if defined(USE_RADIO_NRF24)
+bool sendNrf24Packet(uint32_t payload) {
     if (!radioReady) return false;
     nrf24.stopListening();
     nrf24.openWritingPipe(nrf24PipeAddress);
     const bool sent = nrf24.write(&payload, sizeof(payload));
     nrf24.startListening();
     return sent;
-#else
-    (void)payload;
-    return false;
-#endif
 }
+#endif
 
 double iftttValue(const char *source) {
+    if (peripheralRegistry.findProperty(source)) {
+        kc868a6::core::PropertySnapshot snapshot;
+        const auto result = peripheralRegistry.readProperty(source, millis(), snapshot);
+        if (!result.ok()) reportCoreError(result);
+        if (!result.ok() || snapshot.quality != kc868a6::core::Quality::Valid) return NAN;
+        return std::visit([](const auto &value) -> double {
+            using T = std::decay_t<decltype(value)>;
+            if constexpr (std::is_arithmetic_v<T>) return static_cast<double>(value);
+            return NAN;
+        }, snapshot.value);
+    }
     if (strcmp(source, "temperature1") == 0) return temperatureValues[0];
     if (strcmp(source, "temperature2") == 0) return temperatureValues[1];
     if (strcmp(source, "bmeTemperature") == 0) return airTemperature;
@@ -742,7 +965,11 @@ double iftttValue(const char *source) {
         return webUi.settings().s2InputEnabled ? (s2Pressed ? 1.0F : 0.0F) : NAN;
     }
     if (strcmp(source, "rf24Packet") == 0) {
+#if defined(USE_RADIO_NRF24)
         return rf24PacketAvailable ? static_cast<double>(lastRf24Packet) : NAN;
+#else
+        return NAN;
+#endif
     }
     if (strncmp(source, "digital", 7) == 0) {
         const int channel = atoi(source + 7) - 1;
@@ -753,54 +980,69 @@ double iftttValue(const char *source) {
     if (strncmp(source, "analog", 6) == 0) {
         const int channel = atoi(source + 6) - 1;
         if (channel >= 0 && channel < kc868a6::analogInputCount) {
-            return analogReadings[channel];
+            kc868a6::core::PropertySnapshot snapshot;
+            const auto descriptors = analogInputs.properties();
+            const auto result = peripheralRegistry.readProperty(
+                descriptors.data[channel].id, millis(), snapshot);
+            if (!result.ok()) reportCoreError(result);
+            if (result.ok() && snapshot.quality == kc868a6::core::Quality::Valid) {
+                if (const auto *value = std::get_if<uint32_t>(&snapshot.value)) {
+                    return *value;
+                }
+            }
+            return NAN;
         }
     }
     return NAN;
 }
 
-bool iftttConditionMatches(double value, double threshold, const char *comparison) {
-    if (!isfinite(value)) return false;
-    if (strcmp(comparison, ">") == 0) return value > threshold;
-    if (strcmp(comparison, "<") == 0) return value < threshold;
-    if (strcmp(comparison, ">=") == 0) return value >= threshold;
-    if (strcmp(comparison, "<=") == 0) return value <= threshold;
-    if (strcmp(comparison, "==") == 0) return value == threshold;
-    if (strcmp(comparison, "!=") == 0) return value != threshold;
-    return false;
-}
-
 void updateIftttRules(const String &rules) {
     iftttRulesJson = rules;
-    memset(iftttPreviousMatches, 0, sizeof(iftttPreviousMatches));
-    DynamicJsonDocument document(2048);
-    const uint8_t count = deserializeJson(document, rules) || !document.is<JsonArray>()
-                              ? 0
-                              : document.as<JsonArray>().size();
+    for (auto &condition : iftttConditions) condition = {};
+    DynamicJsonDocument document(8192);
+    if (deserializeJson(document, rules) || !document.is<JsonArray>()) {
+        reportCoreError({kc868a6::core::ErrorCode::InvalidArgument, "ifttt_stored_rules"});
+        return;
+    }
+    const uint8_t count = document.as<JsonArray>().size();
     recordEvent("IFTTT: aktywne reguły " + String(count) + ".");
 }
 
 void evaluateIftttRules() {
-    DynamicJsonDocument document(2048);
-    if (deserializeJson(document, iftttRulesJson) || !document.is<JsonArray>()) return;
+    DynamicJsonDocument document(8192);
+    if (deserializeJson(document, iftttRulesJson) || !document.is<JsonArray>()) {
+        reportCoreError({kc868a6::core::ErrorCode::InvalidArgument, "ifttt_runtime_rules"});
+        return;
+    }
     uint8_t ruleIndex = 0;
     for (JsonObject rule : document.as<JsonArray>()) {
         if (ruleIndex >= 4) break;
-        bool matches = false;
+        bool fire = false;
         if (rule["enabled"] | false) {
-            const float value = iftttValue(rule["source"] | "");
+            const double value = iftttValue(rule["source"] | "");
             const double threshold = rule["threshold"] | 0.0;
-            matches = iftttConditionMatches(
-                value, threshold, rule["comparison"] | "");
+            fire = iftttConditions[ruleIndex].fires(value, threshold, rule["comparison"] | "");
+        } else {
+            iftttConditions[ruleIndex] = {};
         }
-        if (matches && !iftttPreviousMatches[ruleIndex]) {
+        if (fire) {
             const String ruleName = "Reguła " + String(ruleIndex + 1);
             recordEvent("IFTTT: " + ruleName + " wyzwolona.");
             const char *action = rule["action"] | "relay";
             bool actionSucceeded = true;
-            if (strcmp(action, "rf24Send") == 0 ||
+            if (strcmp(action, "capability") == 0) {
+                const auto result = kc868a6::web::executeJsonAction(
+                    peripheralRegistry, rule["command"]);
+                reportCoreError(result.result);
+                actionSucceeded = result.result.ok() && result.applied;
+            } else if (strcmp(action, "rf24Send") == 0 ||
                 strcmp(action, "rf24Saved") == 0) {
+#if defined(USE_RADIO_NRF24)
                 actionSucceeded = sendNrf24Packet(rule["payload"] | 0U);
+#else
+                actionSucceeded = false;
+                reportCoreError({kc868a6::core::ErrorCode::Unavailable, "rf24_not_compiled"});
+#endif
             } else if (strcmp(action, "beeper") == 0) {
                 actionSucceeded = startBeeperTest();
             } else if (strcmp(action, "oledPage") == 0) {
@@ -821,7 +1063,6 @@ void evaluateIftttRules() {
                             " nie powiodła się.");
             }
         }
-        iftttPreviousMatches[ruleIndex] = matches;
         ++ruleIndex;
     }
 }
@@ -829,6 +1070,66 @@ void evaluateIftttRules() {
 void renderOled(uint8_t inputState) {
     const DeviceSettings &settings = webUi.settings();
     if (!displayReady || !settings.displayEnabled) return;
+    if (settings.displayMode == 5 && iftttDisplayPage == 0) {
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextWrap(false);
+        if (!webUi.screenReady()) {
+            display.setCursor(0, 0);
+            display.print("Screen config error");
+            display.display();
+            return;
+        }
+        const auto &layout = webUi.screenLayout();
+        const uint8_t active = (millis() / (settings.displayPageSeconds * 1000UL)) % layout.pageCount;
+        for (size_t index = 0; index < layout.widgetCount; ++index) {
+            const auto &widget = layout.widgets[index];
+            if (widget.page != active) continue;
+            const auto cell = kc868a6::display::widgetCell(layout.pages[active], widget,
+                                                         display.width(), display.height());
+            kc868a6::core::PropertySnapshot snapshot;
+            const auto read = peripheralRegistry.readProperty(widget.property.data(), millis(), snapshot);
+            reportCoreError(read);
+            String value = "--";
+            if (read.ok() && snapshot.quality == kc868a6::core::Quality::Valid) {
+                value = std::visit([](const auto &item) -> String {
+                    using T = std::decay_t<decltype(item)>;
+                    if constexpr (std::is_same_v<T, std::string_view>) {
+                        return String(item.data(), item.size());
+                    } else if constexpr (std::is_same_v<T, bool>) {
+                        return item ? "ON" : "OFF";
+                    } else {
+                        return String(item);
+                    }
+                }, snapshot.value);
+            }
+            const auto *property = peripheralRegistry.findProperty(widget.property.data());
+            const std::string_view unit = widget.unit[0] ? std::string_view(widget.unit.data()) :
+                property ? property->unit : std::string_view{};
+            if (!unit.empty()) value += " " + String(unit.data(), unit.size());
+            GFXcanvas1 canvas(cell.width, cell.height);
+            if (!canvas.getBuffer()) {
+                reportCoreError({kc868a6::core::ErrorCode::CapacityExceeded, "screen_canvas"});
+                continue;
+            }
+            canvas.setTextColor(1);
+            canvas.setTextWrap(false);
+            canvas.setCursor(0, 0);
+            canvas.print(widget.label.data());
+            canvas.setFont(widget.font == 1 ? &FreeSans9pt7b :
+                           widget.font == 2 ? &FreeMono9pt7b : nullptr);
+            canvas.setTextSize(widget.textSize);
+            int16_t x1, y1;
+            uint16_t width, height;
+            canvas.getTextBounds(value, 0, 0, &x1, &y1, &width, &height);
+            canvas.setCursor(-x1, 9 - y1);
+            canvas.print(value);
+            display.drawBitmap(cell.x, cell.y, canvas.getBuffer(), cell.width, cell.height,
+                               SSD1306_WHITE);
+        }
+        display.display();
+        return;
+    }
 
     uint8_t page = iftttDisplayPage != 0 ? iftttDisplayPage : settings.displayMode;
     if (page == 0) {
@@ -948,8 +1249,8 @@ void reportInputsAndSensors() {
     Serial.println();
 
     Serial.print("Analog raw:");
+    reportCoreError(peripheralRegistry.tick(millis()));
     for (uint8_t channel = 0; channel < kc868a6::analogInputCount; ++channel) {
-        analogReadings[channel] = analogRead(kc868a6::gpio::analogInputs[channel]);
         Serial.printf(" GPIO%u=%u", kc868a6::gpio::analogInputs[channel],
                       analogReadings[channel]);
     }
@@ -960,7 +1261,7 @@ void reportInputsAndSensors() {
         temperature1.requestTemperatures();
         temperatureValues[0] = temperature1.getTempCByIndex(0);
         sensorHumidity[0] = NAN;
-    } else if (settings.gpio32SensorType == 2 && temperature1Ready &&
+    } else if (settings.gpio32SensorType >= 2 && temperature1Ready &&
                millis() - lastDhtReadMs[0] >= 2000) {
         lastDhtReadMs[0] = millis();
         temperatureValues[0] = dht32.readTemperature();
@@ -973,7 +1274,7 @@ void reportInputsAndSensors() {
         temperature2.requestTemperatures();
         temperatureValues[1] = temperature2.getTempCByIndex(0);
         sensorHumidity[1] = NAN;
-    } else if (settings.gpio33SensorType == 2 && temperature2Ready &&
+    } else if (settings.gpio33SensorType >= 2 && temperature2Ready &&
                millis() - lastDhtReadMs[1] >= 2000) {
         lastDhtReadMs[1] = millis();
         temperatureValues[1] = dht33.readTemperature();
@@ -993,7 +1294,8 @@ void reportInputsAndSensors() {
         Serial.printf("GPS lat=%.6f lon=%.6f sats=%u\n",
                       gpsLatitude, gpsLongitude, gpsSatellites);
     }
-    if (settings.bme680Enabled && bme680Ready && bme680.performReading()) {
+    const bool bmeSample = settings.bme680Enabled && bme680Ready && bme680.performReading();
+    if (bmeSample) {
         airTemperature = bme680.temperature;
         airHumidity = bme680.humidity;
         airGasResistance = bme680.gas_resistance;
@@ -1008,12 +1310,13 @@ void reportInputsAndSensors() {
     }
     uint8_t ens160Status = 0;
     uint8_t ens160Data[5] = {};
-    if (settings.ens160Enabled && ens160Ready &&
+    const bool ensSample = settings.ens160Enabled && ens160Ready &&
         readI2cRegisters(kc868a6::i2c::ens160Address,
                                         0x20, &ens160Status, 1) &&
         (ens160Status & 0x02) != 0 &&
         readI2cRegisters(kc868a6::i2c::ens160Address, 0x21,
-                         ens160Data, sizeof(ens160Data))) {
+                         ens160Data, sizeof(ens160Data));
+    if (ensSample) {
         const uint16_t tvoc = ens160Data[1] | (ens160Data[2] << 8);
         const uint16_t eco2 = ens160Data[3] | (ens160Data[4] << 8);
         airQualityIndex = ens160Data[0];
@@ -1027,9 +1330,10 @@ void reportInputsAndSensors() {
     }
 
     uint8_t compassData[6] = {};
-    if (settings.compassEnabled && qmc5883lReady && readI2cRegisters(
+    const bool compassSample = settings.compassEnabled && qmc5883lReady && readI2cRegisters(
                              kc868a6::i2c::qmc5883lAddress, 0x00,
-                             compassData, sizeof(compassData))) {
+                             compassData, sizeof(compassData));
+    if (compassSample) {
         const int16_t x = static_cast<int16_t>(compassData[0] |
                                                (compassData[1] << 8));
         const int16_t y = static_cast<int16_t>(compassData[2] |
@@ -1062,24 +1366,71 @@ void reportInputsAndSensors() {
                       now.second());
     }
 
-    evaluateIftttRules();
+    const double sensorValues[] = {
+        temperatureValues[0], sensorHumidity[0], temperatureValues[1], sensorHumidity[1],
+        airTemperature, airHumidity, static_cast<double>(airGasResistance),
+        static_cast<double>(airQualityIndex), static_cast<double>(airTvoc),
+        static_cast<double>(airEco2), gpsLatitude, gpsLongitude,
+        static_cast<double>(gpsSatellites), static_cast<double>(compassX),
+        static_cast<double>(compassY), static_cast<double>(compassZ),
+    };
+    const bool sensorEnabled[] = {
+        settings.temperature1Enabled, settings.temperature1Enabled,
+        settings.temperature2Enabled, settings.temperature2Enabled,
+        settings.bme680Enabled, settings.bme680Enabled, settings.bme680Enabled,
+        settings.ens160Enabled, settings.ens160Enabled, settings.ens160Enabled,
+        settings.gpsEnabled && settings.uart1Mode == 1,
+        settings.gpsEnabled && settings.uart1Mode == 1,
+        settings.gpsEnabled && settings.uart1Mode == 1,
+        settings.compassEnabled, settings.compassEnabled, settings.compassEnabled,
+    };
+    const bool available[] = {
+        temperature1Ready, settings.gpio32SensorType >= 2 && temperature1Ready,
+        temperature2Ready, settings.gpio33SensorType >= 2 && temperature2Ready,
+        bmeSample, bmeSample, bmeSample,
+        ensSample, ensSample, ensSample,
+        gps.location.isValid() && gps.location.age() < 30000,
+        gps.location.isValid() && gps.location.age() < 30000,
+        gps.location.isValid() && gps.location.age() < 30000,
+        compassSample, compassSample, compassSample,
+    };
+    for (size_t index = 0; index < kc868a6::peripherals::SensorReadings::count; ++index) {
+        const auto quality = !sensorEnabled[index] ? kc868a6::core::Quality::Disabled
+            : !available[index] ? kc868a6::core::Quality::Unavailable : kc868a6::core::Quality::Valid;
+        uint32_t sampledAt = millis();
+        if (index < 2 && settings.gpio32SensorType >= 2) sampledAt = lastDhtReadMs[0];
+        if (index >= 2 && index < 4 && settings.gpio33SensorType >= 2) sampledAt = lastDhtReadMs[1];
+        if (index >= 10 && index < 13 && gps.location.isValid()) sampledAt -= gps.location.age();
+        reportCoreError(sensorReadings.publish(index, sensorValues[index], quality, sampledAt));
+    }
     renderOled(inputState);
 }
 
 }
 
 void setup() {
+    webUi.setBluetoothPresence(blePresence);
+    webUi.setCurrentInputs(currentInputs);
     webUi.prepare();
     configureBluetooth(webUi.settings().bluetoothMode);
     initializePeripherals();
     Serial.println("KC868-A6 PlatformIO firmware ready");
     webUi.begin(deviceStatusJson, setRelay, applyDeviceSettings, startBeeperTest,
-                updateIftttRules, scanBluetoothDevices, sendNrf24Packet,
-                radioMonitorJson);
+                updateIftttRules, scanBluetoothDevices
+#if defined(USE_RADIO_NRF24)
+                , sendNrf24Packet, radioMonitorJson
+#endif
+                );
 }
 
 void loop() {
     webUi.loop();
+    reportCoreError(blePresence.tick(millis()));
+    reportCoreError(transport.tick(millis()));
+    if (millis() - lastIftttMs >= 100) {
+        lastIftttMs = millis();
+        evaluateIftttRules();
+    }
 #if defined(USE_RADIO_NRF24)
     while (radioReady && nrf24.available()) {
         nrf24.read(&lastRf24Packet, sizeof(lastRf24Packet));
@@ -1100,8 +1451,8 @@ void loop() {
         }
     }
     if (beeperActive && static_cast<int32_t>(millis() - beeperStopAt) >= 0) {
-        ledcWriteTone(kc868a6::gpio::dac1, 0);
-        ledcWrite(kc868a6::gpio::dac1, 0);
+        ledcWriteTone(configuredBeeperPin, 0);
+        ledcWrite(configuredBeeperPin, 0);
         beeperActive = false;
         recordEvent("Buzzer: test zakończony.");
     }

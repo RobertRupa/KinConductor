@@ -1,5 +1,18 @@
 const translations = {
   pl: {
+    pageScreen: "Ekran", pageSettings: "Ustawienia", capabilityAction: "Akcja interfejsu",
+    bleSelectId: "Wybierz ID", bleIdSaved: "ID zapisane · in_range",
+    udpBindHelp: "Nasłuch: 0.0.0.0 (wszystkie lokalne adresy). Nadawca używa IP płytki i tego portu. Adres/port docelowy ustawiasz w akcji UDP Send w IO/IFTTT.",
+    networkIdentity: "Sieć · hostname i mDNS", hostnameHelp: "Bez .local; litery, cyfry i myślnik. Zmiana ponownie łączy Wi-Fi. Domyślnie: kinconductor.local.",
+    currentCalibration: "Pomiar prądu · kalibracja wejść A1–A4",
+    currentRepair: "Przygotuj nową konfigurację (wyłączone kanały)",
+    currentHelp: "Domyślnie wyłączone. Wprowadź dwa zmierzone punkty ADC oraz odpowiadające im wartości sygnału i amperów. To skalowanie liniowe, nie AC RMS z surowego przebiegu.",
+    currentWiring: "Potwierdź wersję wejść płytki. Pętla 4–20 mA może wymagać zewnętrznego odbiornika; konfiguracja nie zmienia wejścia napięciowego w prądowe. Nie podłączaj napięcia sieciowego do ADC.",
+    interfaceGrid: "Grid interfejsów", addScreenPage: "Dodaj stronę",
+    capabilityDescription: "Moduły, odczyty i akcje udostępnione przez interfejsy.",
+    screenDescription: "Grid per strona i dane modułów. Do 8 stron i 16 widgetów łącznie.",
+    screenModeNote: "Po zapisaniu układu wybierz tryb OLED „Grid interfejsów”.",
+    settingsSchemaDescription: "Formularz generowany ze schematu konfiguracji firmware.",
     controller: "sterownik", connecting: "łączenie", overview: "CENTRUM STEROWANIA",
     dashboard: "Panel urządzenia", live: "Dane na żywo", activeRelays: "AKTYWNE PRZEKAŹNIKI",
     temperature: "TEMPERATURA", sensorOne: "czujnik 1", airQuality: "JAKOŚĆ POWIETRZA",
@@ -35,6 +48,11 @@ const translations = {
     portConfig: "PORTY", interfaceSettings: "Konfiguracja interfejsów", i2cClock: "Częstotliwość I²C",
     i2cStartupScan: "Adresy I²C wykryte przy starcie",
     diagnosticsSection: "DIAGNOSTYKA", diagnosticsDescription: "Peryferia wykryte podczas startu i bieżący stan interfejsów.",
+    boardPinout: "Wyprowadzenia i zasoby", boardRole: "Rola", boardOwner: "Rezerwacja",
+    boardLimits: "Ograniczenia", boardInputOnly: "tylko wejście", boardStrapping: "strapping",
+    boardPlanNote: "Rezerwacje konfiguracji, nie detekcja sprzętu. P17 nie dodaje czwartego UART. GPIO12: pin strapping.",
+    boardValid: "Plan zasobów poprawny", boardError: "Nie udało się odczytać profilu płytki.",
+    boardConfigUnavailable: "Konfiguracja niedostępna; pokazano ostatnie ustawienia RAM lub defaults.",
     runtimeStatus: "Stan urządzenia", rf24RadioState: "nRF24", rf24LastPacket: "Ostatni pakiet",
     rf24Monitor: "RADIO · MONITOR", rf24Captured: "Odebrane pakiety RF24",
     rf24MonitorNote: "Monitor odbiera 32-bitowe ramki na kanale 76 i pipe E8E8F0F0E1.",
@@ -97,6 +115,19 @@ const translations = {
     bluetoothScanError: "Skan BLE nie powiódł się."
   },
   en: {
+    pageScreen: "Screen", pageSettings: "Settings", capabilityAction: "Interface action",
+    bleSelectId: "Select ID", bleIdSaved: "ID saved · in_range",
+    udpBindHelp: "Listen: 0.0.0.0 (all local addresses). Send to the board IP and this port. Destination address/port is configured in the UDP Send action in IO/IFTTT.",
+    networkIdentity: "Network · hostname and mDNS", hostnameHelp: "Without .local; letters, digits and hyphens. Changes reconnect Wi-Fi. Default: kinconductor.local.",
+    currentCalibration: "Current measurement · A1–A4 calibration",
+    currentRepair: "Prepare replacement configuration (disabled channels)",
+    currentHelp: "Disabled by default. Enter two measured ADC endpoints with corresponding signal and amperes values. Linear scaling, not AC RMS from a raw waveform.",
+    currentWiring: "Check your board input revision. A 4–20 mA loop may require an external receiver; configuration does not turn voltage inputs into current inputs. Never connect mains voltage to ADC.",
+    interfaceGrid: "Interface grid", addScreenPage: "Add page",
+    capabilityDescription: "Modules, readings and actions provided by interfaces.",
+    screenDescription: "Per-page grids and module data. Up to 8 pages and 16 widgets total.",
+    screenModeNote: "After saving the layout, select OLED mode “Interface grid”.",
+    settingsSchemaDescription: "Form generated from the firmware configuration schema.",
     controller: "controller", connecting: "connecting", overview: "CONTROL CENTER",
     dashboard: "Device dashboard", live: "Live data", activeRelays: "ACTIVE RELAYS",
     temperature: "TEMPERATURE", sensorOne: "sensor 1", airQuality: "AIR QUALITY",
@@ -132,6 +163,11 @@ const translations = {
     portConfig: "PORTS", interfaceSettings: "Interface configuration", i2cClock: "I²C clock",
     i2cStartupScan: "I²C addresses detected at startup",
     diagnosticsSection: "DIAGNOSTICS", diagnosticsDescription: "Peripherals detected at startup and current interface status.",
+    boardPinout: "Pinout and resources", boardRole: "Role", boardOwner: "Reservation",
+    boardLimits: "Constraints", boardInputOnly: "input only", boardStrapping: "strapping",
+    boardPlanNote: "Configuration reservations, not hardware detection. P17 does not add a fourth UART. GPIO12: strapping pin.",
+    boardValid: "Resource plan valid", boardError: "Could not read the board profile.",
+    boardConfigUnavailable: "Configuration unavailable; showing last RAM settings or defaults.",
     runtimeStatus: "Device status", rf24RadioState: "nRF24", rf24LastPacket: "Last packet",
     rf24Monitor: "RADIO · MONITOR", rf24Captured: "Received RF24 packets",
     rf24MonitorNote: "Monitoring 32-bit frames on channel 76 and pipe E8E8F0F0E1.",
@@ -205,6 +241,9 @@ let rf24History = [];
 let savedRf24Packets = [];
 let rf24Available = false;
 let lastRf24RefreshAt = 0;
+let lastBoardStatus = null;
+let lastBoardRefreshAt = 0;
+let boardLoading = false;
 const $ = (selector) => document.querySelector(selector);
 const t = (key) => translations[language][key] || key;
 const deviceNameKeys = {
@@ -234,6 +273,7 @@ function setLanguage(nextLanguage) {
   });
   renderDevices(lastDeviceList, lastI2cDetected);
   renderRf24Monitor();
+  renderBoardStatus();
   if (statusTimer) refreshStatus();
 }
 
@@ -258,6 +298,9 @@ async function refreshStatus() {
     const data = await response.json();
     renderStatus(data);
     const activePage = document.querySelector(".page-tab.is-active")?.dataset.page;
+    if (activePage === "diagnostics" && Date.now() - lastBoardRefreshAt >= 5000) {
+      refreshBoardStatus();
+    }
     if ((activePage === "interfaces" || activePage === "automation") &&
         Date.now() - lastRf24RefreshAt >= 1400) {
       lastRf24RefreshAt = Date.now();
@@ -269,7 +312,86 @@ async function refreshStatus() {
   }
 }
 
+async function refreshBoardStatus() {
+  if (boardLoading) return;
+  boardLoading = true;
+  lastBoardRefreshAt = Date.now();
+  try {
+    const response = await fetch("/api/board", { cache: "no-store" });
+    if (!response.ok) throw new Error("board_status");
+    const data = await response.json();
+    if (!Array.isArray(data.pins) || !Array.isArray(data.claims) ||
+        typeof data.configurationReady !== "boolean" || typeof data.valid !== "boolean" ||
+        typeof data.configurationError !== "string" || typeof data.error !== "string" ||
+        typeof data.subject !== "string" || !Number.isInteger(data.inputAddress) ||
+        !data.relays || !["address", "portMask", "reservedMask"].every(
+          (key) => Number.isInteger(data.relays[key])) ||
+        !data.pins.every((pin) => pin && Number.isInteger(pin.gpio) &&
+          typeof pin.role === "string" && ["inputOnly", "strapping", "adc", "dac"].every(
+            (key) => typeof pin[key] === "boolean")) ||
+        !data.claims.every((claim) => claim && typeof claim.kind === "string" &&
+          Number.isInteger(claim.number) && typeof claim.owner === "string")) {
+      throw new Error("board_shape");
+    }
+    lastBoardStatus = data;
+    renderBoardStatus();
+  } catch {
+    lastBoardStatus = null;
+    $("#boardPins").replaceChildren();
+    $("#boardExpanders").textContent = "--";
+    $("#boardMessage").textContent = t("boardError");
+  } finally {
+    boardLoading = false;
+  }
+}
+
+function renderBoardStatus() {
+  if (!lastBoardStatus) return;
+  const data = lastBoardStatus;
+  $("#boardMessage").textContent = !data.configurationReady
+    ? `${t("boardConfigUnavailable")} (${data.configurationError})`
+    : data.valid ? t("boardValid") : `${data.error}: ${data.subject}`;
+  const hex = (value) => `0x${Number(value).toString(16).padStart(2, "0")}`;
+  $("#boardExpanders").textContent =
+    `PCF8574 DI: ${hex(data.inputAddress)} P0-P7 | PCF8574 RLY: ${hex(data.relays.address)} P0-P5 (${hex(data.relays.portMask)}), P6-P7 ${hex(data.relays.reservedMask)}`;
+  const rows = data.pins.map((pin) => {
+    const owner = data.claims.find((claim) => claim.kind === "gpio" && claim.number === pin.gpio)?.owner;
+    const flags = [
+      pin.inputOnly ? t("boardInputOnly") : "",
+      pin.strapping ? t("boardStrapping") : "",
+      pin.adc ? "ADC1" : "", pin.dac ? "DAC" : ""
+    ].filter(Boolean).join(", ");
+    const row = document.createElement("tr");
+    for (const value of [pin.gpio, pin.role, owner || "--", flags || "--"]) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.append(cell);
+    }
+    return row;
+  });
+  $("#boardPins").replaceChildren(...rows);
+}
+
+function renderHardware(hardware) {
+  const ids = ["#headerCpu", "#headerRam", "#headerPsram", "#headerFlash"];
+  if (!hardware || !hardware.cpu || !hardware.ram || !hardware.psram || !hardware.flash ||
+      typeof hardware.cpu.model !== "string" ||
+      ![hardware.cpu.cores, hardware.cpu.frequencyMHz, hardware.ram.heapBytes,
+        hardware.ram.freeBytes, hardware.psram.totalBytes, hardware.psram.freeBytes,
+        hardware.flash.totalBytes, hardware.flash.firmwareBytes].every(
+        (value) => Number.isFinite(value) && value >= 0)) {
+    ids.forEach((id) => { $(id).textContent = "--"; });
+    return;
+  }
+  const kib = (value) => `${Math.round(value / 1024)} KiB`;
+  $("#headerCpu").textContent = `${hardware.cpu.model} · ${hardware.cpu.cores}× ${hardware.cpu.frequencyMHz} MHz`;
+  $("#headerRam").textContent = `${kib(hardware.ram.freeBytes)} / ${kib(hardware.ram.heapBytes)} heap`;
+  $("#headerPsram").textContent = hardware.psram.totalBytes ? `${kib(hardware.psram.freeBytes)} / ${kib(hardware.psram.totalBytes)}` : "0";
+  $("#headerFlash").textContent = `${(hardware.flash.totalBytes / 1048576).toFixed(0)} MiB · FW ${kib(hardware.flash.firmwareBytes)}`;
+}
+
 function renderStatus(data) {
+  renderHardware(data.hardware);
   const network = data.network || {};
   const connected = Boolean(network.connected);
   $(".connection").className = `connection ${connected ? "online" : "offline"}`;
@@ -278,6 +400,9 @@ function renderStatus(data) {
   $("#networkIp").textContent = network.ip || "--";
   $("#wifiRssi").textContent = connected ? network.rssi : "--";
   $("#wifiMode").textContent = network.setup ? t("setupMode") : t("stationMode");
+  $("#udpListenerStatus").textContent = network.udpListenPort ?
+    `${network.udpListenAddress}:${network.udpListenPort} · ${network.ip}:${network.udpListenPort}` :
+    "UDP RX: off (port 0)";
   $("#lastUpdate").textContent = new Date().toLocaleTimeString(language === "pl" ? "pl-PL" : "en-GB");
 
   const relays = Array.isArray(data.relays) ? data.relays : [];
@@ -474,6 +599,10 @@ function populateSettingsForms(settings) {
   interfaceForm.elements.beeperFrequencyHz.value = settings.beeperFrequencyHz;
   interfaceForm.elements.beeperDurationMs.value = settings.beeperDurationMs;
   interfaceForm.elements.beeperEnabled.checked = Boolean(settings.beeperEnabled);
+  for (const name of ["beeperPin", "fanPin", "fanFrequencyHz", "udpListenPort", "blePresenceTimeoutSeconds"]) {
+    interfaceForm.elements[name].value = settings[name];
+  }
+  interfaceForm.elements.fanEnabled.checked = Boolean(settings.fanEnabled);
   interfaceForm.elements.s2InputEnabled.checked = Boolean(settings.s2InputEnabled);
   interfaceForm.elements.displayEnabled.checked = Boolean(settings.displayEnabled);
   interfaceForm.elements.displayMode.value = settings.displayMode;
@@ -590,6 +719,17 @@ async function loadRf24Packets() {
     const response = await fetch("/api/rf24/packets", { cache: "no-store" });
     if (!response.ok) throw new Error("rf24");
     const result = await response.json();
+    document.querySelector(".rf24-monitor-panel").hidden = result.compiled === false;
+    const source = $("#iftttSource");
+    if (result.compiled === true && !source.querySelector("option[value='rf24Packet']")) {
+      const option = document.createElement("option");
+      option.value = "rf24Packet";
+      option.textContent = t("sourceRf24");
+      source.append(option);
+    }
+    for (const option of document.querySelectorAll("#iftttAction option")) {
+      if (option.value === "rf24Send" || option.value === "rf24Saved") option.hidden = result.compiled === false;
+    }
     rf24Available = Boolean(result.available);
     rf24History = Array.isArray(result.history) ? result.history : [];
     savedRf24Packets = Array.isArray(result.saved) ? result.saved : [];
@@ -646,6 +786,10 @@ async function saveDeviceSettings(form, messageElement, sensorSettings) {
     payload.beeperFrequencyHz = Number(form.elements.beeperFrequencyHz.value);
     payload.beeperDurationMs = Number(form.elements.beeperDurationMs.value);
     payload.beeperEnabled = form.elements.beeperEnabled.checked;
+    for (const name of ["beeperPin", "fanPin", "fanFrequencyHz", "udpListenPort", "blePresenceTimeoutSeconds"]) {
+      payload[name] = Number(form.elements[name].value);
+    }
+    payload.fanEnabled = form.elements.fanEnabled.checked;
     payload.s2InputEnabled = form.elements.s2InputEnabled.checked;
     payload.displayEnabled = form.elements.displayEnabled.checked;
     payload.displayMode = Number(form.elements.displayMode.value);
@@ -663,18 +807,12 @@ async function saveDeviceSettings(form, messageElement, sensorSettings) {
   submitButton.disabled = true;
   messageElement.textContent = "";
   try {
-    const response = await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) throw new Error("settings");
-    deviceSettings = await response.json();
+    deviceSettings = await window.CapabilityUI.request("/api/settings", payload);
     populateSettingsForms(deviceSettings);
     messageElement.textContent = t("settingsSaved");
     await refreshStatus();
-  } catch {
-    messageElement.textContent = t("settingsError");
+  } catch (error) {
+    messageElement.textContent = `${t("settingsError")}: ${error.message}`;
   } finally {
     submitButton.disabled = false;
   }
@@ -724,7 +862,9 @@ function renderIftttRules() {
     enabled.setAttribute("aria-label", `Enable rule ${index + 1}`);
     enabled.addEventListener("change", () => { rule.enabled = enabled.checked; });
     const description = document.createElement("span");
-    if (rule.action === "beeper") {
+    if (rule.action === "capability") {
+      description.textContent = `${iftttSourceLabel(rule.source)} ${rule.comparison} ${rule.threshold} → ${rule.command?.id || "--"} ${JSON.stringify(rule.command?.parameters || {})}`;
+    } else if (rule.action === "beeper") {
       description.textContent = `${iftttSourceLabel(rule.source)} ${rule.comparison} ${rule.threshold} → ${t("actionBeeper")}`;
     } else if (rule.action === "rf24Saved") {
       const packet = savedRf24Packets.find((saved) => Number(saved.id) === Number(rule.packetId));
@@ -867,9 +1007,15 @@ async function scanNearbyBluetooth() {
       const rssi = document.createElement("span");
       rssi.className = "device-state";
       rssi.textContent = `${device.rssi} dBm`;
-      card.append(dot, content, rssi);
+      const select = document.createElement("button");
+      select.type = "button";
+      select.className = "secondary-button";
+      select.textContent = t("bleSelectId");
+      select.addEventListener("click", () => { $("#bleTarget").value = device.address; });
+      card.append(dot, content, rssi, select);
       list.append(card);
     }
+
     message.textContent = `${nearbyBluetoothDevices.length} BLE`;
   } catch {
     message.textContent = t("bluetoothScanError");
@@ -878,9 +1024,29 @@ async function scanNearbyBluetooth() {
   }
 }
 
+async function loadBleTarget() {
+  try {
+    const target = await window.CapabilityUI.request("/api/bluetooth/target");
+    $("#bleTarget").value = target.address;
+  } catch (error) { $("#bleTargetMessage").textContent = error.message; }
+}
+$("#bleTargetSave").addEventListener("click", async () => {
+  const button = $("#bleTargetSave");
+  button.disabled = true;
+  try {
+    const target = await window.CapabilityUI.request("/api/bluetooth/target", { address: $("#bleTarget").value.trim() });
+    $("#bleTarget").value = target.address;
+    $("#bleTargetMessage").textContent = t("bleIdSaved");
+  } catch (error) { $("#bleTargetMessage").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
 $("#language").addEventListener("change", (event) => setLanguage(event.target.value));
 document.querySelectorAll(".page-tab").forEach((tab) => {
-  tab.addEventListener("click", () => switchPage(tab.dataset.page));
+  tab.addEventListener("click", () => {
+    switchPage(tab.dataset.page);
+    if (tab.dataset.page === "interfaces") loadBleTarget();
+  });
 });
 $("#iftttBuilderForm").addEventListener("submit", (event) => event.preventDefault());
 function updateIftttActionFields() {
@@ -899,7 +1065,9 @@ function updateIftttActionFields() {
   const savedRadioAction = selectedAction === "rf24Saved";
   const oledAction = selectedAction === "oledPage";
   const beeperAction = selectedAction === "beeper";
-  $("#relayActionFields").hidden = radioAction || savedRadioAction || oledAction || beeperAction;
+  const capabilityAction = selectedAction === "capability";
+  $("#iftttCapabilityFields").hidden = !capabilityAction;
+  $("#relayActionFields").hidden = radioAction || savedRadioAction || oledAction || beeperAction || capabilityAction;
   $("#rf24ActionFields").hidden = !radioAction;
   $("#rf24SavedActionFields").hidden = !savedRadioAction;
   $("#oledActionFields").hidden = !oledAction;
@@ -909,6 +1077,15 @@ $("#iftttAction").addEventListener("change", updateIftttActionFields);
 $("#addIftttRule").addEventListener("click", () => {
   if (iftttRules.length >= 4) return;
   const action = $("#iftttAction").value;
+  let command;
+  if (action === "capability") {
+    try {
+      command = window.CapabilityUI.getIftttCommand();
+    } catch (error) {
+      $("#iftttMessage").textContent = error.message;
+      return;
+    }
+  }
   const selectedPacket = action === "rf24Saved"
     ? savedRf24Packets.find((packet) => Number(packet.id) === Number($("#iftttRf24SavedPacket").value))
     : null;
@@ -922,6 +1099,7 @@ $("#addIftttRule").addEventListener("click", () => {
     comparison: $("#iftttComparison").value,
     threshold: Number($("#iftttThreshold").value),
     action,
+    ...(command ? { command } : {}),
     relay: action === "relay" ? Number($("#iftttRelay").value) : 0,
     on: $("#iftttRelayState").value === "true",
     payload: action === "rf24Send" ? Number($("#iftttRfPayload").value) : selectedPacket?.payload ?? 0,

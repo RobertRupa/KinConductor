@@ -4,16 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#183c32">
-  <title>KC868-A6 | Panel</title>
+  <title>KinConductor | KC868-A6</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
+  <script src="/capabilities.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="KC868-A6">
+    <a class="brand" href="/" aria-label="KinConductor">
       <span class="brand-mark" aria-hidden="true">A6</span>
-      <span><strong>KC868-A6</strong><small data-i18n="controller">sterownik</small></span>
+      <span><strong>KinConductor</strong><small>KC868-A6 · <span data-i18n="controller">sterownik</span></small></span>
     </a>
+    <dl class="hardware-summary" id="hardwareSummary" aria-label="Hardware">
+      <div><dt>CPU</dt><dd id="headerCpu">--</dd></div>
+      <div><dt>RAM</dt><dd id="headerRam">--</dd></div>
+      <div><dt>PSRAM</dt><dd id="headerPsram">--</dd></div>
+      <div><dt>Flash</dt><dd id="headerFlash">--</dd></div>
+    </dl>
     <div class="top-actions">
       <span class="connection"><i id="connectionDot"></i><span id="connectionText" data-i18n="connecting">łączenie</span></span>
       <select id="language" aria-label="Language">
@@ -29,10 +36,13 @@
   <main class="page-shell">
     <nav class="page-tabs" role="tablist" aria-label="Device pages">
       <button class="page-tab is-active" type="button" role="tab" aria-selected="true" data-page="overview" data-i18n="pageOverview">Przegląd</button>
+      <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="io">IO</button>
       <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="sensors" data-i18n="pageSensors">Czujniki</button>
       <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="interfaces" data-i18n="pageInterfaces">Interfejsy</button>
       <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="diagnostics" data-i18n="pageDiagnostics">Diagnostyka</button>
       <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="automation" data-i18n="pageAutomation">IFTTT</button>
+      <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="screen" data-i18n="pageScreen">Ekran</button>
+      <button class="page-tab" type="button" role="tab" aria-selected="false" data-page="settings" data-i18n="pageSettings">Ustawienia</button>
     </nav>
 
     <div class="page-view is-active" id="overviewPage" role="tabpanel">
@@ -155,9 +165,9 @@
           </select>
           <div class="setting-list">
             <label class="field-label" for="gpio32SensorType">GPIO32 · <span data-i18n="sensorPortOne">port czujnika 1</span></label>
-            <select id="gpio32SensorType" name="gpio32SensorType"><option value="0" data-i18n="sensorOff">Wyłączony</option><option value="1">DS18B20</option><option value="2">DHT22</option></select>
+            <select id="gpio32SensorType" name="gpio32SensorType"><option value="0" data-i18n="sensorOff">Wyłączony</option><option value="1">DS18B20</option><option value="2">DHT22</option><option value="3">DHT11</option></select>
             <label class="field-label" for="gpio33SensorType">GPIO33 · <span data-i18n="sensorPortTwo">port czujnika 2</span></label>
-            <select id="gpio33SensorType" name="gpio33SensorType"><option value="0" data-i18n="sensorOff">Wyłączony</option><option value="1">DS18B20</option><option value="2">DHT22</option></select>
+            <select id="gpio33SensorType" name="gpio33SensorType"><option value="0" data-i18n="sensorOff">Wyłączony</option><option value="1">DS18B20</option><option value="2">DHT22</option><option value="3">DHT11</option></select>
             <label class="setting-row" data-peripheral-row="bme680"><span><strong>BME680</strong><small data-i18n="bmeDescription">Temperatura, wilgotność, gaz</small><small class="peripheral-note" data-peripheral-note="bme680" hidden></small></span><input type="checkbox" name="bme680Enabled" data-peripheral-enable="bme680"><i></i></label>
             <label class="setting-row" data-peripheral-row="ens160"><span><strong>ENS160</strong><small data-i18n="ensDescription">AQI, TVOC, eCO₂</small><small class="peripheral-note" data-peripheral-note="ens160" hidden></small></span><input type="checkbox" name="ens160Enabled" data-peripheral-enable="ens160"><i></i></label>
             <label class="setting-row" data-peripheral-row="compass"><span><strong>QMC5883L</strong><small data-i18n="compass">Kompas · XYZ</small><small class="peripheral-note" data-peripheral-note="compass" hidden></small></span><input type="checkbox" name="compassEnabled" data-peripheral-enable="compass"><i></i></label>
@@ -180,6 +190,15 @@
           </div>
         </section>
       </div>
+      <form id="currentSettingsForm" class="panel current-panel">
+        <h2 data-i18n="currentCalibration">Pomiar prądu · kalibracja wejść A1–A4</h2>
+        <p class="field-hint" data-i18n="currentHelp">Domyślnie wyłączone. Wybierz napięcie lub pętlę prądową i wprowadź dwa zmierzone punkty ADC oraz odpowiadające im wartości sygnału i amperów. To skalowanie liniowe, nie pomiar AC RMS z surowego przebiegu.</p>
+        <p class="settings-warning" data-i18n="currentWiring">Potwierdź wersję wejść płytki. Pętla 4–20 mA może wymagać zewnętrznego odbiornika; konfiguracja nie zmienia fizycznego wejścia napięciowego w prądowe. Nie podłączaj napięcia sieciowego do ADC.</p>
+        <div id="currentChannels" class="current-channels"></div>
+        <button type="button" class="secondary-button" id="currentRepair" hidden data-i18n="currentRepair">Przygotuj nową konfigurację (wyłączone kanały)</button>
+        <button type="submit" class="primary-button" data-i18n="saveSettings">Zapisz ustawienia</button>
+        <p id="currentMessage" role="status"></p>
+      </form>
     </section>
 
     <section class="page-view" id="interfacesPage" role="tabpanel" hidden>
@@ -193,7 +212,7 @@
           <div class="settings-subhead"><span data-i18n="oledConfig">EKRAN OLED</span></div>
           <label class="setting-row" data-peripheral-row="oled"><span><strong data-i18n="oledEnabled">Włącz ekran</strong><small>SSD1306 · I²C 0x3C · SDA4/SCL15</small><small class="peripheral-note" data-peripheral-note="oled" hidden></small></span><input type="checkbox" name="displayEnabled" data-peripheral-enable="oled"><i></i></label>
           <label class="field-label" for="displayMode" data-i18n="oledPageMode">Strony ekranu</label>
-          <select id="displayMode" name="displayMode"><option value="0" data-i18n="oledCycle">Automatyczny cykl</option><option value="1" data-i18n="oledStatus">Status urządzenia</option><option value="2" data-i18n="oledSensors">Sensory</option><option value="3" data-i18n="oledAir">Jakość powietrza</option><option value="4" data-i18n="oledGrid">Siatka danych</option></select>
+          <select id="displayMode" name="displayMode"><option value="0" data-i18n="oledCycle">Automatyczny cykl</option><option value="1" data-i18n="oledStatus">Status urządzenia</option><option value="2" data-i18n="oledSensors">Sensory</option><option value="3" data-i18n="oledAir">Jakość powietrza</option><option value="4" data-i18n="oledGrid">Siatka danych</option><option value="5" data-i18n="interfaceGrid">Grid interfejsów</option></select>
           <label class="field-label" for="displayPageSeconds" data-i18n="oledPageTime">Czas strony</label>
           <select id="displayPageSeconds" name="displayPageSeconds"><option value="2">2 s</option><option value="5">5 s</option><option value="10">10 s</option><option value="20">20 s</option></select>
           <label class="field-label" for="displayBrightness" data-i18n="oledBrightness">Jasność / kontrast</label>
@@ -214,6 +233,12 @@
           <select id="bluetoothMode" name="bluetoothMode"><option value="0" data-i18n="bluetoothOff">Wyłączony</option><option value="1" data-i18n="bluetoothScan">Skanowanie BLE</option><option value="2" data-i18n="bluetoothBeacon">Beacon KC868-A6</option></select>
           <div class="test-row"><button class="secondary-button" id="bluetoothScanButton" type="button" data-i18n="scanBluetooth">Skanuj pobliskie</button><span id="bluetoothScanMessage" role="status"></span></div>
           <div class="device-list nearby-list" id="bluetoothDeviceList"></div>
+          <label class="field-label" for="bleTarget">BLE ID · MAC</label>
+          <input id="bleTarget" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF">
+          <button class="secondary-button" type="button" id="bleTargetSave">Zapisz ID / Save ID</button>
+          <p id="bleTargetMessage" role="status"></p>
+          <label class="field-label" for="blePresenceTimeoutSeconds">BLE timeout (s) · in_range</label>
+          <input id="blePresenceTimeoutSeconds" name="blePresenceTimeoutSeconds" type="number" min="5" max="3600" value="60">
           <p class="settings-warning" data-i18n="bluetoothWarning">BLE scan i beacon są trybami rozłącznymi; skanowanie może chwilowo opóźnić web API.</p>
           <label class="field-label" for="i2cClock" data-i18n="i2cClock">Częstotliwość I²C</label>
           <select id="i2cClock" name="i2cClockHz"><option value="100000">100 kHz</option><option value="50000">50 kHz</option></select>
@@ -223,13 +248,25 @@
           <select id="uart1Baud" name="uart1Baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select>
           <label class="field-label" for="rs485Baud" data-i18n="rs485Baud">Prędkość RS-485</label>
           <select id="rs485Baud" name="rs485Baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select>
+          <label class="field-label" for="udpListenPort">UDP · port odbioru / listen port (0 = off)</label>
+          <input id="udpListenPort" name="udpListenPort" type="number" min="0" max="65535" value="0">
+          <p class="field-hint" data-i18n="udpBindHelp">Nasłuch: 0.0.0.0 (wszystkie lokalne adresy). Nadawca używa IP płytki i tego portu. Adres/port docelowy ustawiasz w akcji UDP Send w IO/IFTTT.</p>
+          <p class="field-hint" id="udpListenerStatus">--</p>
           <div class="settings-subhead"><span data-i18n="beeperConfig">BEEPER · DA-1</span></div>
           <label class="setting-row"><span><strong data-i18n="enableBeeper">Użyj DA-1 dla beepera</strong><small data-i18n="beeperNote">PWM na DAC1 · wyłącza analogowe DA-1</small></span><input type="checkbox" name="beeperEnabled"><i></i></label>
+          <label class="field-label" for="beeperPin">Beeper · wyjście / output</label>
+          <select id="beeperPin" name="beeperPin"><option value="26">DAC1 · DA-1 · GPIO26</option><option value="25">DAC2 · DA-2 · GPIO25</option></select>
           <label class="field-label" for="beeperFrequency" data-i18n="beeperFrequency">Częstotliwość</label>
           <select id="beeperFrequency" name="beeperFrequencyHz"><option value="500">500 Hz</option><option value="1000">1 kHz</option><option value="2000">2 kHz</option><option value="3000">3 kHz</option><option value="4000">4 kHz</option></select>
           <label class="field-label" for="beeperDuration" data-i18n="beeperDuration">Czas testu</label>
           <select id="beeperDuration" name="beeperDurationMs"><option value="100">100 ms</option><option value="250">250 ms</option><option value="500">500 ms</option><option value="1000">1 s</option></select>
           <div class="test-row"><button class="secondary-button" id="beeperTestButton" type="button" data-i18n="testBeeper">Test beepera</button><span id="beeperTestMessage" role="status"></span></div>
+          <div class="settings-subhead"><span>PWM · 0–10 V converter</span></div>
+          <label class="setting-row"><span><strong>PWM output</strong><small>3.3 V PWM only; external PWM→0–10 V converter required. Not AC triac control.</small></span><input type="checkbox" name="fanEnabled"><i></i></label>
+          <label class="field-label" for="fanPin">PWM · wyjście / output</label>
+          <select id="fanPin" name="fanPin"><option value="25">DAC2 · DA-2 · GPIO25</option><option value="26">DAC1 · DA-1 · GPIO26</option></select>
+          <label class="field-label" for="fanFrequencyHz">PWM Hz</label>
+          <input id="fanFrequencyHz" name="fanFrequencyHz" type="number" min="100" max="25000" value="1000">
           <div class="settings-subhead"><span data-i18n="buttonConfig">WEJŚCIE PRZYCISKU</span></div>
           <label class="setting-row"><span><strong data-i18n="enableS2">Użyj S2 jako wejścia</strong><small data-i18n="s2PinNote">GPIO0 · przytrzymanie przy resecie uruchamia tryb flash</small></span><input type="checkbox" name="s2InputEnabled"><i></i></label>
           <p class="button-state-note"><span data-i18n="buttonState">Stan S2</span><strong id="s2ButtonState">--</strong></p>
@@ -262,6 +299,41 @@
       </section>
     </section>
 
+    <section class="page-view" id="ioPage" role="tabpanel" hidden>
+      <div class="view-heading"><h1>IO · Capabilities</h1><p data-i18n="capabilityDescription">Moduły, odczyty i akcje udostępnione przez interfejsy.</p></div>
+      <p id="capabilityMessage" role="status"></p>
+      <div id="capabilityModules" class="capability-modules"></div>
+    </section>
+
+    <section class="page-view" id="screenPage" role="tabpanel" hidden>
+      <div class="view-heading"><h1 data-i18n="pageScreen">Ekran</h1><p data-i18n="screenDescription">Grid per strona, powiązania danych z modułów. Do 8 stron i 16 widgetów łącznie.</p></div>
+      <form id="screenLayoutForm" class="panel">
+        <p data-i18n="screenModeNote">Zapis układu nie zmienia trybu ekranu. Wybierz „Grid interfejsów” w ustawieniach OLED.</p>
+        <div id="screenPages"></div>
+        <button type="button" class="secondary-button" id="screenAddPage" data-i18n="addScreenPage">Dodaj stronę</button>
+        <button type="submit" class="primary-button" data-i18n="saveSettings">Zapisz ustawienia</button>
+        <p id="screenMessage" role="status"></p>
+      </form>
+    </section>
+
+    <section class="page-view" id="settingsPage" role="tabpanel" hidden>
+      <div class="view-heading"><h1 data-i18n="pageSettings">Ustawienia</h1><p data-i18n="settingsSchemaDescription">Formularz generowany ze schematu konfiguracji firmware.</p></div>
+      <form id="networkSettingsForm" class="panel">
+        <h2 data-i18n="networkIdentity">Sieć · hostname i mDNS</h2>
+        <label class="field-label" for="hostname">Hostname</label>
+        <input id="hostname" name="hostname" maxlength="63" pattern="[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?" required value="kinconductor">
+        <p class="field-hint" data-i18n="hostnameHelp">Bez .local; litery, cyfry i myślnik. Zmiana ponownie łączy Wi-Fi. Domyślnie: kinconductor.local.</p>
+        <p id="networkIdentityStatus" role="status"></p>
+        <button type="submit" class="primary-button" data-i18n="saveSettings">Zapisz ustawienia</button>
+        <p id="networkSettingsMessage" role="status"></p>
+      </form>
+      <form id="schemaSettingsForm" class="panel">
+        <div id="schemaFields" class="schema-fields"></div>
+        <button type="submit" class="primary-button" data-i18n="saveSettings">Zapisz ustawienia</button>
+        <p id="schemaMessage" role="status"></p>
+      </form>
+    </section>
+
     <section class="page-view" id="diagnosticsPage" role="tabpanel" hidden>
       <div class="view-heading">
         <div><p class="eyebrow" data-i18n="diagnosticsSection">DIAGNOSTYKA</p><h1 data-i18n="pageDiagnostics">Diagnostyka</h1></div>
@@ -282,6 +354,18 @@
           <p class="diagnostic-line"><span data-i18n="buttonState">Stan S2</span><strong id="diagnosticS2State">--</strong></p>
           <p class="diagnostic-line"><span data-i18n="beeperConfig">BEEPER · DA-1</span><strong id="diagnosticBeeperState">--</strong></p>
         </section>
+        <section class="panel board-panel">
+          <div class="panel-heading"><div><p class="eyebrow">KC868-A6</p><h2 data-i18n="boardPinout">Wyprowadzenia i zasoby</h2></div></div>
+          <p class="form-message" id="boardMessage" role="status">--</p>
+          <p class="field-note" data-i18n="boardPlanNote">Rezerwacje konfiguracji, nie detekcja sprzętu. P17 nie dodaje czwartego UART. GPIO12: pin strapping.</p>
+          <p class="field-note" id="boardExpanders">--</p>
+          <div class="board-table-scroll">
+            <table class="board-table">
+              <thead><tr><th>GPIO</th><th data-i18n="boardRole">Rola</th><th data-i18n="boardOwner">Rezerwacja</th><th data-i18n="boardLimits">Ograniczenia</th></tr></thead>
+              <tbody id="boardPins"></tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -295,23 +379,15 @@
           <div class="panel-heading"><div><p class="eyebrow" data-i18n="newRule">NOWA REGUŁA</p><h2 data-i18n="conditionAction">Warunek → akcja</h2></div></div>
           <label class="field-label" for="iftttSource" data-i18n="ifSource">Jeśli odczyt</label>
           <select id="iftttSource">
-            <option value="temperature1" data-i18n="sourceTemp1">Temperatura · GPIO32</option>
-            <option value="temperature2" data-i18n="sourceTemp2">Temperatura · GPIO33</option>
             <option value="buttonS2" data-i18n="sourceS2">Przycisk S2</option>
-            <option value="rf24Packet" data-i18n="sourceRf24">Odebrany pakiet RF24</option>
-            <option value="bmeTemperature" data-i18n="sourceBmeTemp">Temperatura BME680</option>
-            <option value="humidity" data-i18n="sourceHumidity">Wilgotność BME680</option>
-            <option value="airQuality" data-i18n="sourceAqi">AQI ENS160</option>
-            <option value="digital1">DI 1</option><option value="digital2">DI 2</option><option value="digital3">DI 3</option><option value="digital4">DI 4</option>
-            <option value="digital5">DI 5</option><option value="digital6">DI 6</option><option value="digital7">DI 7</option><option value="digital8">DI 8</option>
-            <option value="analog1">AI 1 · ADC</option><option value="analog2">AI 2 · ADC</option><option value="analog3">AI 3 · ADC</option><option value="analog4">AI 4 · ADC</option>
           </select>
           <div class="ifttt-condition-row">
-            <select id="iftttComparison" aria-label="Comparison"><option value=">">&gt;</option><option value="<">&lt;</option><option value=">=">≥</option><option value="<=">≤</option><option value="==">=</option><option value="!=">≠</option></select>
+            <select id="iftttComparison" aria-label="Comparison"><option value=">">&gt;</option><option value="<">&lt;</option><option value=">=">≥</option><option value="<=">≤</option><option value="==">=</option><option value="!=">≠</option><option value="changed">Zmiana / Changed</option></select>
             <input id="iftttThreshold" type="number" step="any" value="25" aria-label="Threshold">
           </div>
           <label class="field-label" for="iftttAction" data-i18n="thenAction">Wtedy wykonaj</label>
-          <select id="iftttAction"><option value="relay" data-i18n="actionRelay">Steruj przekaźnikiem</option><option value="beeper" data-i18n="actionBeeper">Uruchom buzzer</option><option value="rf24Send" data-i18n="actionRf24">Nadaj payload RF24</option><option value="rf24Saved" data-i18n="actionRf24Saved">Odtwórz zapisany RF24</option><option value="oledPage" data-i18n="actionOled">Pokaż stronę OLED</option></select>
+          <select id="iftttAction"><option value="relay" data-i18n="actionRelay">Steruj przekaźnikiem</option><option value="beeper" data-i18n="actionBeeper">Uruchom buzzer</option><option value="rf24Send" data-i18n="actionRf24">Nadaj payload RF24</option><option value="rf24Saved" data-i18n="actionRf24Saved">Odtwórz zapisany RF24</option><option value="oledPage" data-i18n="actionOled">Pokaż stronę OLED</option><option value="capability" data-i18n="capabilityAction">Akcja interfejsu</option></select>
+          <div id="iftttCapabilityFields" hidden><select id="iftttCapabilityAction"></select><div id="iftttCapabilityParameters"></div></div>
           <div class="ifttt-condition-row" id="relayActionFields">
             <select id="iftttRelay"><option value="1">Relay 1</option><option value="2">Relay 2</option><option value="3">Relay 3</option><option value="4">Relay 4</option><option value="5">Relay 5</option><option value="6">Relay 6</option></select>
             <select id="iftttRelayState"><option value="true" data-i18n="turnOn">Włącz</option><option value="false" data-i18n="turnOff">Wyłącz</option></select>
