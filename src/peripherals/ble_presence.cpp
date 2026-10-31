@@ -1,17 +1,9 @@
 #include "peripherals/ble_presence.h"
+#include <cstdio>
 
 namespace kc868a6::peripherals {
 namespace {
 const core::PeripheralDescriptor identity{"ble.presence", "ble-presence"};
-const std::array<core::PropertyDescriptor, 1> propertyDescriptors{{
-    {BlePresence::propertyId, core::ValueType::Boolean, ""}
-}};
-// Both use the existing property evaluator: enter == true, leave == false.
-// These are conditions, not unsupported property-backed Event descriptors.
-const std::array<core::TriggerDescriptor, 2> triggerDescriptors{{
-    {"ble.presence/enter", core::TriggerKind::Condition, BlePresence::propertyId},
-    {"ble.presence/leave", core::TriggerKind::Condition, BlePresence::propertyId}
-}};
 int hexDigit(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'A' && c <= 'F') return c - 'A' + 10;
@@ -21,8 +13,13 @@ int hexDigit(char c) {
 }
 
 const core::PeripheralDescriptor &BlePresence::descriptor() const { return identity; }
-core::List<core::PropertyDescriptor> BlePresence::properties() const { return propertyDescriptors; }
-core::List<core::TriggerDescriptor> BlePresence::triggers() const { return triggerDescriptors; }
+BlePresence::BlePresence(IBlePresenceScanner &scanner) : scanner_(scanner) {
+    properties_[0] = {propertyId, core::ValueType::Boolean, ""};
+    triggers_[0] = {"ble.presence/enter", core::TriggerKind::Condition, propertyId};
+    triggers_[1] = {"ble.presence/leave", core::TriggerKind::Condition, propertyId};
+}
+core::List<core::PropertyDescriptor> BlePresence::properties() const { return {properties_.data(), targets_.count + 1}; }
+core::List<core::TriggerDescriptor> BlePresence::triggers() const { return {triggers_.data(), targets_.count + 2}; }
 
 core::Result BlePresence::parseMac(std::string_view text, BleAddress &address) {
     if (text.size() != 17) return {core::ErrorCode::InvalidArgument, "ble_presence_mac"};
@@ -73,22 +70,22 @@ core::Result BlePresence::validateTimeoutMs(uint32_t timeoutMs) {
     return {};
 }
 
-void BlePresence::setValue(bool inRange, core::Quality quality, uint32_t nowMs,
+void BlePresence::setValue(size_t index, bool inRange, core::Quality quality, uint32_t nowMs,
                            core::ErrorCode error) {
-    if (std::get<bool>(value_.value) != inRange || value_.quality != quality ||
-        value_.error != error) {
-        value_ = {inRange, quality, nowMs, error};
+    auto &value = values_[index];
+    if (std::get<bool>(value.value) != inRange || value.quality != quality ||
+        value.error != error) {
+        value = {inRange, quality, nowMs, error};
     }
 }
 
 void BlePresence::resetPresence(uint32_t nowMs) {
-    seen_ = false;
-    everSeen_ = false;
-    lastSeenAtMs_ = 0;
-    value_ = {false, !hasTarget_ ? core::Quality::Disabled
-                               : started_ && available_ ? core::Quality::WarmingUp
-                                                        : core::Quality::Unavailable,
-              nowMs};
+    seen_ = {};
+    everSeen_ = {};
+    lastSeenAtMs_ = {};
+    for (auto &value : values_) value = {false, started_ && available_ ?
+        core::Quality::WarmingUp : core::Quality::Unavailable, nowMs};
+    disabled_ = {false, core::Quality::Disabled, nowMs};
 }
 
 core::Result BlePresence::setTarget(std::string_view mac, uint32_t nowMs) {
@@ -99,12 +96,49 @@ core::Result BlePresence::setTarget(std::string_view mac, uint32_t nowMs) {
     if (!mac.empty()) {
         parseMac(mac, address);
     }
-    if (hasTarget_ == !mac.empty() && (!hasTarget_ || target_ == address)) return {};
-    hasTarget_ = !mac.empty();
-    target_ = address;
-    selectedMac_ = normalized;
-    scanner_.setTarget(hasTarget_ ? &target_ : nullptr);
+    BleTargets targets;
+    if (!mac.empty()) { targets.addresses[0] = address; targets.count = 1; targets.legacyAddress = address; }
+    return setTargets(targets, nowMs);
+}
+
+core::Result BlePresence::setTargets(const BleTargets &targets, uint32_t nowMs) {
+    if (targets.count > bleTargetCapacity) return {core::ErrorCode::CapacityExceeded, "ble_targets"};
+    if (targets.legacyAddress != BleAddress{}) {
+        BleAddress parsed;
+        const auto mac = formatMac(targets.legacyAddress);
+        const auto valid = parseMac(mac.data(), parsed);
+        if (!valid.ok()) return valid;
+    }
+    for (size_t i = 0; i < targets.count; ++i) {
+        BleAddress parsed;
+        const auto mac = formatMac(targets.addresses[i]);
+        const auto valid = parseMac(mac.data(), parsed);
+        if (!valid.ok()) return valid;
+        for (size_t j = 0; j < i; ++j) if (targets.addresses[j] == parsed)
+            return {core::ErrorCode::DuplicateId, "ble_targets"};
+    }
+    if (targets.count == targets_.count && targets.addresses == targets_.addresses &&
+        targets.legacyAddress == targets_.legacyAddress) return {};
+    const auto previous = targets_;
+    const auto oldValues = values_;
+    const auto oldSeen = seen_;
+    const auto oldEverSeen = everSeen_;
+    const auto oldLastSeen = lastSeenAtMs_;
+    targets_ = targets;
+    legacyMac_ = targets.legacyAddress == BleAddress{} ? std::array<char, 18>{} : formatMac(targets.legacyAddress);
     resetPresence(nowMs);
+    for (size_t i = 0; i < targets.count; ++i) {
+        macs_[i] = formatMac(targets.addresses[i]);
+        std::snprintf(propertyIds_[i].data(), propertyIds_[i].size(), "ble.presence/%s/in_range", macs_[i].data());
+        std::snprintf(triggerIds_[i].data(), triggerIds_[i].size(), "ble.presence/%s/state", macs_[i].data());
+        properties_[i + 1] = {propertyIds_[i].data(), core::ValueType::Boolean, ""};
+        triggers_[i + 2] = {triggerIds_[i].data(), core::TriggerKind::Condition, propertyIds_[i].data()};
+        for (size_t j = 0; j < previous.count; ++j) if (previous.addresses[j] == targets.addresses[i]) {
+            values_[i] = oldValues[j]; seen_[i] = oldSeen[j];
+            everSeen_[i] = oldEverSeen[j]; lastSeenAtMs_[i] = oldLastSeen[j];
+        }
+    }
+    scanner_.setTargets(targets_);
     return {};
 }
 
@@ -127,7 +161,7 @@ void BlePresence::setScanAvailable(bool available, uint32_t nowMs) {
 
 core::Result BlePresence::begin(uint32_t nowMs) {
     started_ = true;
-    scanner_.setTarget(hasTarget_ ? &target_ : nullptr);
+    scanner_.setTargets(targets_);
     resetPresence(nowMs);
     return tick(nowMs);
 }
@@ -135,7 +169,7 @@ core::Result BlePresence::begin(uint32_t nowMs) {
 core::Result BlePresence::tick(uint32_t nowMs) {
     if (!started_ || !available_) {
         health_ = {false, core::ErrorCode::None};
-        setValue(false, hasTarget_ ? core::Quality::Unavailable : core::Quality::Disabled, nowMs);
+        for (size_t i = 0; i < targets_.count; ++i) setValue(i, false, core::Quality::Unavailable, nowMs);
         return {};
     }
     core::Result result;
@@ -150,30 +184,27 @@ core::Result BlePresence::tick(uint32_t nowMs) {
     if (!result.ok()) {
         if (scanning_) scanner_.stop();
         scanning_ = false;
-        seen_ = false;
-        everSeen_ = false;
+        seen_ = {};
+        everSeen_ = {};
         scan_ = {};
         health_ = {false, result.code};
-        setValue(false, hasTarget_ ? core::Quality::Unavailable : core::Quality::Disabled,
-                 nowMs, hasTarget_ ? result.code : core::ErrorCode::None);
+        for (size_t i = 0; i < targets_.count; ++i) setValue(i, false, core::Quality::Unavailable, nowMs, result.code);
         return result;
     }
     health_ = {true, core::ErrorCode::None};
-    if (!hasTarget_) {
-        setValue(false, core::Quality::Disabled, nowMs);
-        return {};
+    for (size_t i = 0; i < targets_.count; ++i) {
+        if (scan_.targetObserved[i]) {
+            seen_[i] = true;
+            everSeen_[i] = true;
+            lastSeenAtMs_[i] = scan_.targetSeenAtMs[i];
+            // A callback during poll can be slightly newer than the loop's nowMs.
+            if (static_cast<int32_t>(nowMs - lastSeenAtMs_[i]) < 0) lastSeenAtMs_[i] = nowMs;
+        }
+        if (seen_[i] && static_cast<uint32_t>(nowMs - lastSeenAtMs_[i]) >= timeoutMs_) {
+            seen_[i] = false; // Do not resurrect expired sightings on a later millis wrap.
+        }
+        setValue(i, seen_[i], everSeen_[i] ? core::Quality::Valid : core::Quality::WarmingUp, nowMs);
     }
-    if (scan_.targetObserved) {
-        seen_ = true;
-        everSeen_ = true;
-        lastSeenAtMs_ = scan_.targetSeenAtMs;
-        // A callback during poll can be slightly newer than the loop's nowMs.
-        if (static_cast<int32_t>(nowMs - lastSeenAtMs_) < 0) lastSeenAtMs_ = nowMs;
-    }
-    if (seen_ && static_cast<uint32_t>(nowMs - lastSeenAtMs_) >= timeoutMs_) {
-        seen_ = false; // Do not resurrect expired sightings on a later millis wrap.
-    }
-    setValue(seen_, everSeen_ ? core::Quality::Valid : core::Quality::WarmingUp, nowMs);
     return {};
 }
 
@@ -183,14 +214,21 @@ void BlePresence::stop() {
     started_ = false;
     scan_ = {};
     health_ = {};
-    resetPresence(value_.updatedAtMs);
+    resetPresence(disabled_.updatedAtMs);
 }
 
 core::Result BlePresence::readProperty(std::string_view id,
                                        core::PropertySnapshot &snapshot) const {
-    if (id != propertyId) return {core::ErrorCode::NotFound, id};
-    snapshot = value_;
-    return {};
+    if (id == propertyId) {
+        for (size_t i = 0; i < targets_.count; ++i) if (targets_.addresses[i] == targets_.legacyAddress) {
+            snapshot = values_[i]; return {};
+        }
+        snapshot = disabled_; return {};
+    }
+    for (size_t i = 0; i < targets_.count; ++i) if (id == properties_[i + 1].id) {
+        snapshot = values_[i]; return {};
+    }
+    return {core::ErrorCode::NotFound, id};
 }
 
 core::Result BlePresence::scanResults(uint32_t nowMs, BleScanSnapshot &snapshot) const {

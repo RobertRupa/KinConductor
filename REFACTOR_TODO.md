@@ -1012,6 +1012,12 @@ odbiorniki UDP per reguła z filtrami, kontekst LLM i rozszerzenie istniejącego
 workflow CI. Wgrano firmware base oraz matching LittleFS; wyniki i ograniczenia
 w [archiwum wykonanych prac](./TODO_REFACTORED.md#settings-css-ble-udp-i-kontekst-llm--2026-10-31).
 
+Przyrost v1.1.1: lista do ośmiu zapisanych BLE z niezależnymi
+`ble.presence/<MAC>/in_range`, migracja pojedynczego celu i stabilny alias
+legacy, walidacja/zapis NVS, UI listy i dynamiczne wyzwalacze.
+Testy software/local builds PASS; nie wgrano tej wersji i nie wykonano
+fizycznego testu obecności ośmiu nadajników.
+
 - [ ] Publikacja repozytorium i wykonanie GitHub Actions: **zablokowane w tej
   sesji przez brak możliwości przesłania kodu do zewnętrznej usługi**.
   Lokalny workflow/actionlint to nie dowód udanego builda na GitHub.

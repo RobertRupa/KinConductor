@@ -1,7 +1,11 @@
 const translations = {
   pl: {
     pageScreen: "Ekran", pageSettings: "Ustawienia", capabilityAction: "Akcja interfejsu",
-    bleSelectId: "Wybierz ID", bleIdSaved: "ID zapisane · in_range",
+    bleSelectId: "Wybierz ID", bleIdSaved: "Lista BLE zapisana · in_range",
+    bleRemoveId: "Usuń ID", bleInvalidId: "Nieprawidłowy MAC BLE",
+    bleDuplicateId: "To urządzenie jest już zapisane", bleTargetLimit: "Limit 8 zapisanych urządzeń BLE",
+    bleSavedTargets: "Zapisane urządzenia BLE", bleAddId: "Dodaj ID",
+    bleTargetsHelp: "Do 8 MAC. Każdy ma osobny in_range w IO/IFTTT/OLED. Puste pole nie usuwa urządzeń; użyj Usuń ID.",
     udpPacketSource: "UDP · pakiet na porcie reguły", udpRulePort: "Lokalny port odbioru",
     udpRemoteIp: "IP nadawcy (puste = dowolny)", udpRemotePort: "Port nadawcy (0 = dowolny)",
     udpTextMatch: "Dopasowanie treści", udpExact: "Równa", udpContains: "Zawiera",
@@ -121,7 +125,11 @@ const translations = {
   },
   en: {
     pageScreen: "Screen", pageSettings: "Settings", capabilityAction: "Interface action",
-    bleSelectId: "Select ID", bleIdSaved: "ID saved · in_range",
+    bleSelectId: "Select ID", bleIdSaved: "BLE list saved · in_range",
+    bleRemoveId: "Remove ID", bleInvalidId: "Invalid BLE MAC",
+    bleDuplicateId: "This device is already saved", bleTargetLimit: "Limit of 8 saved BLE devices",
+    bleSavedTargets: "Saved BLE devices", bleAddId: "Add ID",
+    bleTargetsHelp: "Up to 8 MACs. Each has its own in_range in IO/IFTTT/OLED. An empty field does not remove devices; use Remove ID.",
     udpPacketSource: "UDP · packet on rule port", udpRulePort: "Local receive port",
     udpRemoteIp: "Sender IP (empty = any)", udpRemotePort: "Sender port (0 = any)",
     udpTextMatch: "Payload match", udpExact: "Equals", udpContains: "Contains",
@@ -1044,16 +1052,78 @@ async function scanNearbyBluetooth() {
 
 async function loadBleTarget() {
   try {
-    const target = await window.CapabilityUI.request("/api/bluetooth/target");
-    $("#bleTarget").value = target.address;
-  } catch (error) { $("#bleTargetMessage").textContent = error.message; }
+    const targets = await window.CapabilityUI.request("/api/bluetooth/targets");
+    renderSavedBleTargets(targets);
+  } catch (error) {
+    $("#bleSavedTargets").replaceChildren();
+    $("#bleSavedCount").textContent = "-- / 8";
+    $("#bleTargetMessage").textContent = error.message;
+  }
+}
+function validateBleTargetsResponse(targets) {
+  if (targets.schemaVersion !== 1 || targets.capacity !== 8 || !Array.isArray(targets.addresses) ||
+      !Array.isArray(targets.devices) || targets.addresses.length > 8 ||
+      new Set(targets.addresses).size !== targets.addresses.length ||
+      targets.devices.length !== targets.addresses.length ||
+      !targets.devices.every((device, index) => /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(device.address) &&
+        device.address === targets.addresses[index] &&
+        device.property === `ble.presence/${device.address}/in_range` &&
+        typeof device.in_range === "boolean" && typeof device.quality === "string")) {
+    throw new Error("Invalid saved BLE response");
+  }
+  return targets;
+}
+function renderSavedBleTargets(response) {
+  const targets = validateBleTargetsResponse(response);
+  const list = $("#bleSavedTargets");
+  list.replaceChildren();
+  for (const device of targets.devices) {
+    const card = document.createElement("article");
+    card.className = "device-card";
+    const content = document.createElement("div");
+    const address = document.createElement("strong");
+    address.textContent = device.address;
+    const state = document.createElement("small");
+    state.textContent = `in_range: ${device.quality === "valid" ? (device.in_range ? "1" : "0") : device.quality}`;
+    content.append(address, state);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary-button";
+    remove.textContent = t("bleRemoveId");
+    remove.addEventListener("click", async () => {
+      remove.disabled = true;
+      try {
+        const latest = validateBleTargetsResponse(await window.CapabilityUI.request("/api/bluetooth/targets"));
+        const saved = await window.CapabilityUI.request("/api/bluetooth/targets", {
+          schemaVersion: 1, addresses: latest.addresses.filter(address => address !== device.address)
+        });
+        renderSavedBleTargets(saved);
+        await window.CapabilityUI.refresh();
+        $("#bleTargetMessage").textContent = t("bleIdSaved");
+      } catch (error) { $("#bleTargetMessage").textContent = error.message; }
+      finally { remove.disabled = false; }
+    });
+    card.append(content, remove);
+    list.append(card);
+  }
+  $("#bleSavedCount").textContent = `${targets.addresses.length} / 8`;
 }
 $("#bleTargetSave").addEventListener("click", async () => {
   const button = $("#bleTargetSave");
   button.disabled = true;
   try {
-    const target = await window.CapabilityUI.request("/api/bluetooth/target", { address: $("#bleTarget").value.trim() });
-    $("#bleTarget").value = target.address;
+    const address = $("#bleTarget").value.trim().toUpperCase();
+    if (!/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(address) ||
+        address === "00:00:00:00:00:00" || address === "FF:FF:FF:FF:FF:FF") throw new Error(t("bleInvalidId"));
+    const latest = validateBleTargetsResponse(await window.CapabilityUI.request("/api/bluetooth/targets"));
+    if (latest.addresses.includes(address)) throw new Error(t("bleDuplicateId"));
+    if (latest.addresses.length >= 8) throw new Error(t("bleTargetLimit"));
+    const targets = await window.CapabilityUI.request("/api/bluetooth/targets", {
+      schemaVersion: 1, addresses: [...latest.addresses, address]
+    });
+    renderSavedBleTargets(targets);
+    $("#bleTarget").value = "";
+    await window.CapabilityUI.refresh();
     $("#bleTargetMessage").textContent = t("bleIdSaved");
   } catch (error) { $("#bleTargetMessage").textContent = error.message; }
   finally { button.disabled = false; }

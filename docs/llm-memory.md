@@ -42,8 +42,12 @@ network names, serial output or unverified assumptions.
 - Rule UDP: distinct local ports, share one socket for duplicate ports,
   optional sender IP/port and exact/contains text. Maximum four listeners,
   256 UTF-8 bytes, bounded queued matches. Global UDP port must not collide.
-- BLE has one shared nonblocking scanner, bounded 24-device UI cache and one
-  selected target. A healthy scan with no devices differs from scan failure.
+- BLE has one shared nonblocking scanner, bounded 24-device UI cache and up
+  to eight independent saved MACs. IDs are `ble.presence/<MAC>/in_range`.
+  The legacy alias retains the original migrated MAC, not list position;
+  removal disables it, never retargets it. A healthy empty scan is not failure.
+  `ble_targets` is the version-1 list record; old `ble_target` imports only
+  when the list is absent. New IFTTT selectors omit the generic alias.
 - Dynamic IO/actions/Settings/OLED use descriptors. Settings groups are UI
   presentation; the API remains a flat record. Do not duplicate configuration.
 - Firmware-only upload leaves stale WebGUI; asset-only upload leaves stale APIs.
@@ -62,9 +66,9 @@ network names, serial output or unverified assumptions.
 - In dashboard nested grids, `min-width: 0` and `minmax(0, 1fr)` prevent
   content-derived overflow; choose DI column count for the actual inner panel.
   Assert new controls belong to their intended form, not just that IDs exist.
-- Latest working-tree base/coprocessor binaries: 1,538,272 / 1,538,432 bytes
-  in a 1,572,864-byte OTA slot; static RAM 76,784 bytes. Short hardware tests
-  reached about 15 KiB minimum heap. These are not worst-case budgets;
+- Version 1.1.1 base/coprocessor binaries: 1,543,376 / 1,543,552 bytes
+  in a 1,572,864-byte OTA slot; static RAM 78,448 bytes. Earlier hardware tests
+  reached about 15 KiB minimum heap; v1.1.1 was not uploaded. These are not worst-case budgets;
   added drivers require a new flash/heap/capabilities-response review.
 - Hostname HTML patterns use Unicode-sets `v` in modern browsers; escape hyphens.
 - Builds modify `.pio/libdeps`; native compilation reading those headers must
@@ -72,5 +76,5 @@ network names, serial output or unverified assumptions.
 - [release workflow](../.github/workflows/release.yml) exists: branch/PR/manual
   validation and tag-only releases. Local workflow checks do not establish an
   actual successful GitHub run. Publication requires a permitted environment.
-- The last tagged release is v1.1.0; subsequent working-tree fixes are not that
-  immutable release. Do not move or overwrite the tag without an explicit ask.
+- Release v1.1.1 follows the immutable v1.1.0 tag. Do not move or overwrite
+  existing release tags without an explicit ask.

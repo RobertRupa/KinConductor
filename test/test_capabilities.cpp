@@ -59,7 +59,7 @@ class FakeBle final : public peripherals::IBlePresenceScanner {
 public:
     core::Result start() override { return {}; }
     void stop() override {}
-    void setTarget(const peripherals::BleAddress *) override {}
+    void setTargets(const peripherals::BleTargets &) override {}
     core::Result poll(peripherals::BleScanSnapshot &scan) override { scan = {}; return {}; }
 };
 class FakeRuleUdp final : public peripherals::IUdpRulesHardware {
@@ -208,6 +208,10 @@ void testCapabilityJson() {
     assert(document["fields"].size() == 33);
     assert(document["fields"][9]["maximum"] == 5);
     assert(registry.add({&fan, &fan, &fan, &fan}).ok());
+    peripherals::BleTargets targets;
+    for (size_t i = 0; i < 8; ++i)
+        targets.addresses[targets.count++] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, static_cast<uint8_t>(i + 1)};
+    assert(presence.setTargets(targets, 40).ok());
     assert(registry.add({&presence, &presence, &presence, nullptr}).ok());
     assert(registry.add({&transport, &transport, &transport, &transport}).ok());
     peripherals::CurrentInputs current{registry};
@@ -219,6 +223,8 @@ void testCapabilityJson() {
     document.clear();
     assert(web::writeCapabilities(document.to<JsonObject>(), registry, 50).ok());
     assert(document["modules"].size() == 8 && !document.overflowed());
+    assert(document["modules"][4]["properties"].size() == 9);
+    assert(document["modules"][4]["properties"][8]["id"] == "ble.presence/AA:BB:CC:DD:EE:08/in_range");
     std::string json;
     serializeJson(document, json);
     assert(json.size() < web::capabilitiesJsonCapacity);

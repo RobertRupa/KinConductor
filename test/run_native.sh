@@ -26,7 +26,7 @@ trap 'rm -f "$binary"' EXIT
     src/display/screen_layout.cpp \
     src/peripherals/sensor_readings.cpp \
     src/peripherals/fan_control.cpp \
-    test/test_ble_presence.cpp src/peripherals/ble_presence.cpp \
+    test/test_ble_presence.cpp src/peripherals/ble_presence.cpp src/peripherals/ble_targets.cpp \
     test/test_transport.cpp src/peripherals/transport.cpp \
     test/test_measurements.cpp src/peripherals/current_inputs.cpp src/config/network_config.cpp \
     test/test_udp_rules.cpp src/peripherals/udp_rules.cpp src/web/ble_scan.cpp \

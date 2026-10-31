@@ -94,7 +94,7 @@ private:
     void handleSettings(bool save);
     void handleIfttt(bool save);
     void handleBluetoothScan();
-    void handleBluetoothTarget(bool save);
+    void handleBluetoothTarget(bool save, bool multiple = false);
     void loadBluetoothTarget();
     void loadCurrentInputs();
     void handleCurrentInputs(bool save);

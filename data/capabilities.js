@@ -33,6 +33,8 @@
       "fan.main/duty": ["PWM · wysterowanie (%)", "PWM · duty (%)"]
     };
     if (labels[prop.id]) return text(...labels[prop.id]);
+    const ble = prop.id.match(/^ble\.presence\/([0-9A-F:]{17})\/in_range$/);
+    if (ble) return `BLE · ${ble[1]} · in_range (1/0)`;
     const current = prop.id.match(/^current\.main\/channel\/(\d+)\/(amperes|signal)$/);
     if (current) return `A${current[1]} · ${current[2] === "amperes" ? text("prąd (A)", "current (A)") : text("sygnał", "signal")}`;
     return prop.id;
@@ -200,7 +202,8 @@
     const select = $("iftttSource");
     for (const option of select.querySelectorAll("[data-capability]")) option.remove();
     const previousSource = select.value;
-    for (const prop of properties(data).filter((prop) => prop.type !== "text")) {
+    for (const prop of properties(data).filter((prop) => prop.type !== "text" &&
+        prop.id !== "ble.presence/in_range")) {
       const option = node("option", propertyLabel(prop));
       option.value = prop.id;
       option.dataset.capability = "true";
@@ -228,7 +231,8 @@
     loading = true;
     try {
       const data = validateCapabilities(await request("/api/capabilities"));
-      const changed = !capabilities || capabilities.revision !== data.revision;
+      const changed = !capabilities || capabilities.revision !== data.revision ||
+        properties(capabilities).map(prop => prop.id).join("|") !== properties(data).map(prop => prop.id).join("|");
       capabilities = data;
       if (changed) {
         renderModules(data);
@@ -528,7 +532,7 @@
     } catch (error) { $("networkSettingsMessage").textContent = error.message; }
   }
   window.CapabilityUI = {
-    validateCapabilities, validateLayout, validateCurrent, groupedSettings, properties, actions, commandFrom, request, propertyLabel,
+    validateCapabilities, validateLayout, validateCurrent, groupedSettings, properties, actions, commandFrom, request, propertyLabel, refresh,
     getIftttCommand() {
       const action = capabilities && actions(capabilities).find((item) => item.id === $("iftttCapabilityAction").value);
       if (!action) throw new Error("No interface action available");

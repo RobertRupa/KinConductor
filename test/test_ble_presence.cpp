@@ -1,5 +1,6 @@
 #include "peripherals/ble_presence.h"
 #include "core/peripheral_registry.h"
+#include "peripherals/ble_targets.h"
 
 #include <cassert>
 #include <iostream>
@@ -13,18 +14,18 @@ class Scanner final : public peripherals::IBlePresenceScanner {
 public:
     core::Result start() override { ++starts; active = startResult.ok(); return startResult; }
     void stop() override { ++stops; active = false; data = {}; }
-    void setTarget(const peripherals::BleAddress *address) override {
-        target = address ? *address : peripherals::BleAddress{};
-        data.targetObserved = false;
+    void setTargets(const peripherals::BleTargets &targets) override {
+        target = targets.count ? targets.addresses[0] : peripherals::BleAddress{};
+        data.targetObserved = {};
     }
     core::Result poll(peripherals::BleScanSnapshot &snapshot) override {
         snapshot = data;
-        data.targetObserved = false;
+        data.targetObserved = {};
         return pollResult;
     }
-    void observe(uint32_t nowMs) {
-        data.targetObserved = true;
-        data.targetSeenAtMs = nowMs;
+    void observe(uint32_t nowMs, size_t index = 0) {
+        data.targetObserved[index] = true;
+        data.targetSeenAtMs[index] = nowMs;
     }
     core::Result startResult{};
     core::Result pollResult{};
@@ -193,6 +194,104 @@ void cachedUiAndRegistry() {
     registry.stop();
 }
 
+void multipleTargetsAndCodec() {
+    Scanner scanner;
+    BlePresence presence(scanner);
+    peripherals::BleTargets targets;
+    for (size_t i = 0; i < peripherals::bleTargetCapacity; ++i)
+        targets.addresses[targets.count++] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, static_cast<uint8_t>(i + 1)};
+    targets.legacyAddress = targets.addresses[0];
+    assert(presence.setTargets(targets, 0).ok());
+    core::PeripheralRegistry registry;
+    assert(registry.add({&presence, &presence, &presence, nullptr}).ok());
+    assert(presence.properties().size == 9 && presence.triggers().size == 10);
+    presence.setScanAvailable(true, 0);
+    assert(presence.setTimeoutMs(1000).ok() && registry.begin(0).ok());
+    scanner.data.count = peripherals::BleScanSnapshot::capacity;
+    for (size_t i = 0; i < 8; ++i) {
+        const std::string id = "ble.presence/" + std::string(BlePresence::formatMac(targets.addresses[i]).data()) + "/in_range";
+        core::PropertySnapshot snapshot;
+        assert(registry.readProperty(id, 0, snapshot).ok() && snapshot.quality == core::Quality::WarmingUp);
+        scanner.observe(100 + static_cast<uint32_t>(i * 100), i);
+    }
+    assert(registry.tick(800).ok());
+    for (size_t i = 0; i < 8; ++i) {
+        core::PropertySnapshot snapshot;
+        assert(registry.readProperty(presence.properties().data[i + 1].id, 800, snapshot).ok());
+        assert(snapshot.quality == core::Quality::Valid && std::get<bool>(snapshot.value));
+    }
+    assert(registry.tick(1100).ok());
+    assert(!inRange(presence));
+    core::PropertySnapshot last;
+    assert(registry.readProperty("ble.presence/AA:BB:CC:DD:EE:08/in_range", 1100, last).ok());
+    assert(std::get<bool>(last.value));
+    const auto duplicate = targets.addresses[7];
+    targets.addresses[7] = targets.addresses[0];
+    assert(presence.setTargets(targets, 1101).code == core::ErrorCode::DuplicateId);
+    assert(presence.targets().addresses[7] == duplicate);
+    targets.addresses[7] = duplicate;
+    targets.count = 9;
+    assert(presence.setTargets(targets, 1101).code == core::ErrorCode::CapacityExceeded);
+    targets.count = 8;
+
+    DynamicJsonDocument document(peripherals::bleTargetsJsonCapacity);
+    assert(peripherals::writeBleTargets(document.to<JsonObject>(), targets).ok());
+    assert(!document.overflowed());
+    std::string json;
+    serializeJson(document, json);
+    assert(json.find("AA:BB:CC:DD:EE:08") != std::string::npos);
+    peripherals::BleTargets decoded;
+    assert(peripherals::readBleTargets(document.as<JsonVariantConst>(), decoded).ok());
+    assert(decoded.count == 8 && decoded.addresses == targets.addresses);
+    assert(decoded.legacyAddress == targets.legacyAddress);
+    Scanner restoredScanner;
+    BlePresence restored(restoredScanner);
+    assert(restored.setTargets(decoded, 0).ok());
+    assert(restored.selectedMac() == "AA:BB:CC:DD:EE:01");
+    assert(restored.properties().data[8].id == "ble.presence/AA:BB:CC:DD:EE:08/in_range");
+    for (const char *invalid : {
+        R"({"schemaVersion":2,"addresses":[]})",
+        R"({"schemaVersion":1,"addresses":["invalid"]})",
+        R"({"schemaVersion":1,"addresses":["aa:bb:cc:dd:ee:01","AA:BB:CC:DD:EE:01"]})",
+        R"({"schemaVersion":1,"addresses":["AA:BB:CC:DD:EE:01\u0000ignored"]})",
+        R"({"schemaVersion":1,"addresses":[0]})",
+        R"({"schemaVersion":1,"addresses":[],"extra":0})",
+        R"({"schemaVersion":1,"addresses":[1,2,3,4,5,6,7,8,9]})",
+        R"({"schemaVersion":1,"addresses":[],"legacyAddress":null})",
+        R"({"schemaVersion":1,"addresses":[],"legacyAddress":"invalid"})",
+        R"({"addresses":[]})"
+    }) {
+        document.clear(); assert(!deserializeJson(document, invalid));
+        assert(!peripherals::readBleTargets(document.as<JsonVariantConst>(), decoded).ok());
+        assert(decoded.count == 8 && decoded.addresses == targets.addresses);
+    }
+    std::swap(targets.addresses[0], targets.addresses[7]);
+    assert(presence.setTargets(targets, 1102).ok() && !inRange(presence));
+    assert(presence.tick(1102).ok() && !inRange(presence));
+    --targets.count;
+    targets.addresses[7] = {};
+    assert(presence.setTargets(targets, 1103).ok());
+    assert(presence.selectedMac() == "AA:BB:CC:DD:EE:01");
+    assert(value(presence).quality == core::Quality::Disabled); // Removal must not retarget a legacy rule.
+    assert(registry.readProperty("ble.presence/AA:BB:CC:DD:EE:01/in_range", 1103, last).code == core::ErrorCode::NotFound);
+    assert(registry.readProperty("ble.presence/AA:BB:CC:DD:EE:08/in_range", 1103, last).ok());
+    assert(std::get<bool>(last.value));
+    presence.setScanAvailable(false, 1104);
+    assert(registry.readProperty("ble.presence/AA:BB:CC:DD:EE:08/in_range", 1104, last).ok());
+    assert(last.quality == core::Quality::Unavailable);
+    presence.setScanAvailable(true, 1105);
+    assert(presence.tick(1105).ok());
+    assert(registry.readProperty("ble.presence/AA:BB:CC:DD:EE:08/in_range", 1105, last).ok());
+    assert(last.quality == core::Quality::WarmingUp);
+    assert(presence.setTargets({}, 1106).ok());
+    assert(presence.properties().size == 1 && value(presence).quality == core::Quality::Disabled);
+    document.clear();
+    assert(peripherals::writeBleTargets(document.to<JsonObject>(), {}).ok());
+    assert(document["legacyAddress"].is<const char *>());
+    assert(peripherals::readBleTargets(document.as<JsonVariantConst>(), decoded).ok());
+    assert(decoded.count == 0 && decoded.legacyAddress == peripherals::BleAddress{});
+}
+
 void initialLeaveSuppression() {
     Scanner scanner;
     BlePresence presence(scanner);
@@ -232,6 +331,7 @@ void runBlePresenceTests() {
     wrapAndFailures();
     cachedUiAndRegistry();
     initialLeaveSuppression();
+    multipleTargetsAndCodec();
     std::cout << "BLE presence tests passed\n";
 }
 

@@ -466,3 +466,28 @@ wejścia-wyjścia z zasięgu. UDP ma bounded processing, nie gwarancję burst de
 Browser DOM/layout smoke, nie pełny pointer/accessibility test.
 Pomiar prądu/PWM i pełny plan pozostają nieukończone. Publikacja repozytorium
 i wykonanie Actions na GitHub nadal zablokowane w tej sesji.
+
+### Wiele zapisanych BLE — v1.1.1
+
+- [x] Do ośmiu MAC w jednym module BLE; każde urządzenie ma własny timestamp,
+  `in_range` i quality. Śledzenie niezależne od pełnego cache skanera UI.
+- [x] Stabilne ID `ble.presence/<MAC>/in_range` osobno w IO, IFTTT i OLED.
+  Nowe selektory pomijają ogólny alias; cztery reguły IFTTT pozostają limitem.
+- [x] Zapisany MAC legacy zachowany po reorder; usunięcie go wyłącza alias,
+  nie przekierowuje istniejącej reguły na inne urządzenie.
+- [x] Version-1 `ble_targets`, walidacja duplikatów/limitów/typów/NUL;
+  import poprzedniego `ble_target`, wymagany write/readback przed publikacją.
+  Pojedynczy endpoint nie nadpisze listy wieloelementowej: HTTP409.
+- [x] WebGUI: dodawanie, lista i usuwanie konkretnego MAC; kontrola 8-entry
+  limit i aktualizacja capability selectors nawet bez zmiany registry revision.
+- [x] Native ASan/UBSan: osiem równoczesnych stanów, niezależne expiry,
+  reorder/removal, legacy alias, restore codec, full-cache i max JSON.
+  21 JS tests PASS; oba profile i matching LittleFS build PASS.
+- [x] Synthetic browser preview: osiem kart przy 390/860/1200 px,
+  no overflow i widoczne przyciski. To nie test firmware/hardware.
+- [x] README/wiki/memory/package/firmware version zaktualizowane do 1.1.1.
+
+Base **1 543 376 B**, coprocessor **1 543 552 B**, static RAM **78 448 B**;
+OTA headroom **29 488 / 29 312 B**. Osiem modułów, max 63 properties.
+Nie wgrano firmware, nie opublikowano repo/tagu na GitHub. Wielourządzeniowy
+test fizycznej obecności i NVS po zaniku zasilania pozostają do wykonania.

@@ -20,7 +20,7 @@ public:
     Esp32BlePresenceScanner &operator=(const Esp32BlePresenceScanner &) = delete;
     core::Result start() override;
     void stop() override;
-    void setTarget(const BleAddress *address) override;
+    void setTargets(const BleTargets &targets) override;
     core::Result poll(BleScanSnapshot &snapshot) override;
 
 private:
@@ -30,8 +30,7 @@ private:
     portMUX_TYPE mutex_ = portMUX_INITIALIZER_UNLOCKED;
     NimBLEScan *scanner_ = nullptr;
     BleScanSnapshot cache_{};
-    BleAddress target_{};
-    bool hasTarget_ = false;
+    BleTargets targets_{};
     bool accepting_ = false;
     uint32_t callbacksInFlight_ = 0;
 };

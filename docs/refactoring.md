@@ -300,3 +300,30 @@ addresses after serialization. Validation/deployment evidence is in
 [the latest deployment](./build.md#settings-ble-and-rule-udp-deployment--2026-10-31).
 Project workflow context is in [LLM memory](./llm-memory.md).
 This slice does not complete the full architectural plan.
+
+## Eight independent BLE targets — v1.1.1
+
+`BlePresence` remains one registry module, with a bounded list of eight MACs
+and separate sighting/quality state. Its owned descriptor buffers expose
+MAC-specific property IDs; the legacy alias retains its original MAC.
+The adapter synchronizes all eight observation mailboxes independently of
+the UI cache. List edits are validated before persistence/application;
+unchanged MACs retain their state even when reordered.
+
+The provider's bounded descriptor list changes on configuration edits.
+Registry lookups enumerate the current provider list; WebGUI compares property
+IDs as well as registry revision to refresh IO/IFTTT after edits. No ninth
+module or global registry-capacity increase is required. With all eight
+devices there are **63 properties**, including the compatibility alias.
+The existing capabilities JSON budget passes the full eight-module/eight-MAC
+native test; descriptors must not be copied or retained across configuration
+changes. IFTTT stores ID strings, not pointers to mutable descriptor buffers.
+
+The portable version-1 list codec rejects duplicates, overflow, invalid types,
+unknown fields and embedded NUL addresses. The old single target migrates
+when no list record exists. See [API and compatibility](./peripherals.md#saved-ble-devices--v111).
+Native tests cover independent expiry, full scan cache, reorder/removal,
+legacy identity and codec restore; JS tests cover add/remove/limits and
+IFTTT refresh with an unchanged registry revision.
+This release has local build/tests and a synthetic browser layout check,
+not deployment or multi-device physical range validation.

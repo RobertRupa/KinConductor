@@ -235,8 +235,12 @@
           <div class="device-list nearby-list" id="bluetoothDeviceList"></div>
           <label class="field-label" for="bleTarget">BLE ID · MAC</label>
           <input id="bleTarget" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF">
-          <button class="secondary-button" type="button" id="bleTargetSave">Zapisz ID / Save ID</button>
+          <button class="secondary-button" type="button" id="bleTargetSave" data-i18n="bleAddId">Dodaj ID</button>
           <p id="bleTargetMessage" role="status"></p>
+          <h3 data-i18n="bleSavedTargets">Zapisane urządzenia BLE</h3>
+          <span id="bleSavedCount">-- / 8</span>
+          <p class="field-hint" data-i18n="bleTargetsHelp">Do 8 MAC. Każdy ma osobny in_range w IO/IFTTT/OLED. Puste pole nie usuwa urządzeń; użyj Usuń ID.</p>
+          <div class="device-list" id="bleSavedTargets"></div>
           <label class="field-label" for="blePresenceTimeoutSeconds">BLE timeout (s) · in_range</label>
           <input id="blePresenceTimeoutSeconds" name="blePresenceTimeoutSeconds" type="number" min="5" max="3600" value="60">
           <p class="settings-warning" data-i18n="bluetoothWarning">BLE scan i beacon są trybami rozłącznymi; skanowanie może chwilowo opóźnić web API.</p>

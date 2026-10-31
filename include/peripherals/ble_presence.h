@@ -5,6 +5,12 @@
 namespace kc868a6::peripherals {
 
 using BleAddress = std::array<uint8_t, 6>;
+constexpr size_t bleTargetCapacity = 8;
+struct BleTargets {
+    std::array<BleAddress, bleTargetCapacity> addresses{};
+    size_t count = 0;
+    BleAddress legacyAddress{};
+};
 
 struct BleScanDevice {
     BleAddress address{};
@@ -18,18 +24,18 @@ struct BleScanSnapshot {
     static constexpr size_t capacity = 24;
     std::array<BleScanDevice, capacity> devices{};
     size_t count = 0;
-    bool targetObserved = false;
-    uint32_t targetSeenAtMs = 0;
+    std::array<bool, bleTargetCapacity> targetObserved{};
+    std::array<uint32_t, bleTargetCapacity> targetSeenAtMs{};
 };
 
-// Implementations synchronize callbacks internally; poll consumes targetObserved.
-// The selected target must be tracked independently of the bounded UI cache.
+// Implementations synchronize callbacks internally; poll consumes sightings.
+// Saved targets are tracked independently of the bounded UI cache.
 class IBlePresenceScanner {
 public:
     virtual ~IBlePresenceScanner() = default;
     virtual core::Result start() = 0;
     virtual void stop() = 0;
-    virtual void setTarget(const BleAddress *address) = 0;
+    virtual void setTargets(const BleTargets &targets) = 0;
     virtual core::Result poll(BleScanSnapshot &snapshot) = 0;
 };
 
@@ -43,7 +49,9 @@ public:
     static constexpr uint32_t scanResultLifetimeMs = 30000;
     static constexpr std::string_view propertyId = "ble.presence/in_range";
 
-    explicit BlePresence(IBlePresenceScanner &scanner) : scanner_(scanner) {}
+    explicit BlePresence(IBlePresenceScanner &scanner);
+    BlePresence(const BlePresence &) = delete;
+    BlePresence &operator=(const BlePresence &) = delete;
     const core::PeripheralDescriptor &descriptor() const override;
     core::List<core::PropertyDescriptor> properties() const override;
     core::List<core::TriggerDescriptor> triggers() const override;
@@ -56,11 +64,13 @@ public:
 
     // Empty clears the target. Otherwise exactly XX:XX:XX:XX:XX:XX is required.
     core::Result setTarget(std::string_view mac, uint32_t nowMs);
+    core::Result setTargets(const BleTargets &targets, uint32_t nowMs);
+    const BleTargets &targets() const { return targets_; }
     core::Result setTimeoutMs(uint32_t timeoutMs);
     // Call false BEFORE deinitializing/reconfiguring NimBLE. Only scan mode 1
     // with a successfully initialized stack may set this true.
     void setScanAvailable(bool available, uint32_t nowMs);
-    std::string_view selectedMac() const { return {selectedMac_.data(), hasTarget_ ? 17U : 0U}; }
+    std::string_view selectedMac() const { return legacyMac_.data(); }
     uint32_t timeoutMs() const { return timeoutMs_; }
     // Cached, immediate UI results; never starts a second synchronous scan.
     core::Result scanResults(uint32_t nowMs, BleScanSnapshot &snapshot) const;
@@ -74,19 +84,24 @@ public:
 
 private:
     void resetPresence(uint32_t nowMs);
-    void setValue(bool inRange, core::Quality quality, uint32_t nowMs,
+    void setValue(size_t index, bool inRange, core::Quality quality, uint32_t nowMs,
                   core::ErrorCode error = core::ErrorCode::None);
     IBlePresenceScanner &scanner_;
-    BleAddress target_{};
-    std::array<char, 18> selectedMac_{};
+    BleTargets targets_{};
+    std::array<char, 18> legacyMac_{};
+    std::array<std::array<char, 18>, bleTargetCapacity> macs_{};
+    std::array<std::array<char, 40>, bleTargetCapacity> propertyIds_{};
+    std::array<std::array<char, 40>, bleTargetCapacity> triggerIds_{};
+    std::array<core::PropertyDescriptor, bleTargetCapacity + 1> properties_{};
+    std::array<core::TriggerDescriptor, bleTargetCapacity + 2> triggers_{};
     BleScanSnapshot scan_{};
-    core::PropertySnapshot value_{false, core::Quality::Disabled};
+    std::array<core::PropertySnapshot, bleTargetCapacity> values_{};
+    core::PropertySnapshot disabled_{false, core::Quality::Disabled};
     core::Health health_{};
     uint32_t timeoutMs_ = defaultTimeoutMs;
-    uint32_t lastSeenAtMs_ = 0;
-    bool hasTarget_ = false;
-    bool seen_ = false;
-    bool everSeen_ = false;
+    std::array<uint32_t, bleTargetCapacity> lastSeenAtMs_{};
+    std::array<bool, bleTargetCapacity> seen_{};
+    std::array<bool, bleTargetCapacity> everSeen_{};
     bool started_ = false;
     bool available_ = false;
     bool scanning_ = false;

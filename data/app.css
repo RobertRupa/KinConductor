@@ -175,6 +175,8 @@ button, select { cursor: pointer; }
 #iftttBuilderForm .capability-parameter input[type="checkbox"] { width: 20px; height: 20px; padding: 0; }
 #interfaceSettingsForm > input { box-sizing: border-box; width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid #dce4dc; border-radius: 4px; color: var(--ink); background: #fbfcfa; }
 .nearby-list .device-card > button { grid-column: 2 / -1; }
+#bleSavedTargets .device-card { grid-template-columns: minmax(0, 1fr) auto; }
+#bleSavedTargets .device-card > div { min-width: 0; overflow-wrap: anywhere; }
 .add-rule-button { width: 100%; margin-top: 17px; }
 .ifttt-rule-list { display: grid; gap: 8px; }
 .ifttt-rule { min-height: 54px; display: grid; grid-template-columns: 18px minmax(0, 1fr) 30px; align-items: center; gap: 9px; padding: 9px 10px; background: #f7f9f6; border: 1px solid #ebefea; border-radius: 4px; }

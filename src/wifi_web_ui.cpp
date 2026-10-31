@@ -9,6 +9,7 @@
 #include "web/board_status.h"
 #include "web/capabilities.h"
 #include "peripherals/udp_rules.h"
+#include "peripherals/ble_targets.h"
 
 namespace {
 
@@ -269,6 +270,12 @@ void WifiWebUi::startServer() {
     });
     server_.on("/api/bluetooth/target", HTTP_POST, [this]() {
         if (requireAuthentication()) handleBluetoothTarget(true);
+    });
+    server_.on("/api/bluetooth/targets", HTTP_GET, [this]() {
+        if (requireAuthentication()) handleBluetoothTarget(false, true);
+    });
+    server_.on("/api/bluetooth/targets", HTTP_POST, [this]() {
+        if (requireAuthentication()) handleBluetoothTarget(true, true);
     });
     server_.on("/api/rf24/packets", HTTP_GET, [this]() {
         if (requireAuthentication()) handleRf24Packets(false);
@@ -720,43 +727,79 @@ void WifiWebUi::loadBluetoothTarget() {
         bleTargetReady_ = false;
         return;
     }
-    const String stored = preferences_.getString("ble_target", "");
-    const auto result = blePresence_->setTarget(std::string_view(stored.c_str(), stored.length()), millis());
+    kc868a6::peripherals::BleTargets targets;
+    kc868a6::core::Result result;
+    if (preferences_.isKey("ble_targets")) {
+        DynamicJsonDocument document(kc868a6::peripherals::bleTargetsJsonCapacity);
+        const auto parsed = deserializeJson(document, preferences_.getString("ble_targets"));
+        result = parsed ? kc868a6::core::Result{kc868a6::core::ErrorCode::InvalidArgument, "ble_targets"} :
+            kc868a6::peripherals::readBleTargets(document.as<JsonVariantConst>(), targets);
+    } else {
+        const String stored = preferences_.getString("ble_target", "");
+        if (!stored.isEmpty()) {
+            result = kc868a6::peripherals::BlePresence::parseMac({stored.c_str(), stored.length()}, targets.addresses[0]);
+            if (result.ok()) { targets.count = 1; targets.legacyAddress = targets.addresses[0]; }
+        }
+    }
+    if (result.ok()) result = blePresence_->setTargets(targets, millis());
     bleTargetReady_ = result.ok();
     if (!result.ok()) {
         Serial.printf("ERROR: BLE target load failed: %s\n", kc868a6::core::errorCodeName(result.code));
     }
 }
 
-void WifiWebUi::handleBluetoothTarget(bool save) {
+void WifiWebUi::handleBluetoothTarget(bool save, bool multiple) {
     if (!preferencesReady_ || !blePresence_) {
         sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "ble_target"}, 503);
         return;
     }
     if (save) {
-        StaticJsonDocument<256> request;
-        if (server_.arg("plain").length() > 128 ||
-            deserializeJson(request, server_.arg("plain")) ||
-            !request.is<JsonObject>() || request.size() != 1 ||
-            !request["address"].is<const char *>()) {
+        DynamicJsonDocument request(kc868a6::peripherals::bleTargetsJsonCapacity);
+        if (server_.arg("plain").length() > 512 ||
+            deserializeJson(request, server_.arg("plain"))) {
             sendSettingsError({kc868a6::core::ErrorCode::InvalidArgument, "ble_target"}, 400);
             return;
         }
-        std::array<char, 18> normalized{};
-        const JsonString address = request["address"].as<JsonString>();
-        const auto valid = kc868a6::peripherals::BlePresence::normalizeTargetMac(
-            std::string_view(address.c_str(), address.size()), normalized);
-        if (!valid.ok()) { sendSettingsError(valid, 400); return; }
-        const String stored(normalized.data());
-        const auto written = preferences_.putString("ble_target", stored);
-        if ((written == 0 && !stored.isEmpty()) ||
-            !preferences_.isKey("ble_target") ||
-            preferences_.getString("ble_target", "!") != stored) {
+        kc868a6::peripherals::BleTargets targets;
+        kc868a6::core::Result valid;
+        if (multiple) {
+            valid = kc868a6::peripherals::readBleTargets(request.as<JsonVariantConst>(), targets);
+            if (!request.containsKey("legacyAddress")) targets.legacyAddress = blePresence_->targets().legacyAddress;
+        } else if (!request.is<JsonObject>() || request.size() != 1 || !request["address"].is<const char *>()) {
+            valid = {kc868a6::core::ErrorCode::InvalidArgument, "ble_target"};
+        } else {
+            const JsonString address = request["address"].as<JsonString>();
+            std::array<char, 18> normalized{};
+            valid = kc868a6::peripherals::BlePresence::normalizeTargetMac({address.c_str(), address.size()}, normalized);
+            if (valid.ok() && !address.isNull() && address.size() != 0) {
+                valid = kc868a6::peripherals::BlePresence::parseMac(normalized.data(), targets.addresses[0]);
+                targets.count = valid.ok() ? 1 : 0;
+                if (valid.ok()) targets.legacyAddress = targets.addresses[0];
+            }
+            // Legacy writes retain their single-target replacement semantics.
+            if (blePresence_->targets().count > 1) valid = {kc868a6::core::ErrorCode::ResourceConflict, "use_ble_targets"};
+        }
+        if (!valid.ok()) { sendSettingsError(valid,
+            valid.code == kc868a6::core::ErrorCode::ResourceConflict ? 409 : 400); return; }
+        request.clear();
+        valid = kc868a6::peripherals::writeBleTargets(request.to<JsonObject>(), targets);
+        if (!valid.ok() || request.overflowed()) {
+            sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "ble_targets"}, 500); return;
+        }
+        String stored;
+        const size_t length = measureJson(request);
+        if (!stored.reserve(length) || serializeJson(request, stored) != length || stored.length() != length) {
+            sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "ble_targets"}, 500); return;
+        }
+        const auto written = preferences_.putString("ble_targets", stored);
+        if (written != stored.length() ||
+            !preferences_.isKey("ble_targets") ||
+            preferences_.getString("ble_targets", "!") != stored) {
             bleTargetReady_ = false;
             sendSettingsError({kc868a6::core::ErrorCode::StorageWriteFailed, "ble_target"}, 500);
             return;
         }
-        const auto applied = blePresence_->setTarget(normalized.data(), millis());
+        const auto applied = blePresence_->setTargets(targets, millis());
         bleTargetReady_ = applied.ok();
         if (!applied.ok()) { sendSettingsError(applied, 500); return; }
     }
@@ -764,13 +807,36 @@ void WifiWebUi::handleBluetoothTarget(bool save) {
         sendSettingsError({kc868a6::core::ErrorCode::Unavailable, "ble_target"}, 503);
         return;
     }
-    StaticJsonDocument<256> response;
+    DynamicJsonDocument response(JSON_OBJECT_SIZE(8) + 2 * JSON_ARRAY_SIZE(8) +
+        8 * JSON_OBJECT_SIZE(4) + 1536);
     const auto mac = blePresence_->selectedMac();
     response["address"].set(mac);
     response["property"] = "ble.presence/in_range";
     response["timeoutSeconds"] = settings().blePresenceTimeoutSeconds;
+    if (multiple) {
+        const auto result = kc868a6::peripherals::writeBleTargets(response.as<JsonObject>(), blePresence_->targets());
+        if (!result.ok()) { sendSettingsError(result, 500); return; }
+        response["capacity"] = kc868a6::peripherals::bleTargetCapacity;
+        auto devices = response.createNestedArray("devices");
+        const auto descriptors = blePresence_->properties();
+        for (size_t i = 0; i < blePresence_->targets().count; ++i) {
+            auto device = devices.createNestedObject();
+            const auto address = kc868a6::peripherals::BlePresence::formatMac(blePresence_->targets().addresses[i]);
+            device["address"].set(std::string_view{address.data(), 17});
+            device["property"].set(descriptors.data[i + 1].id);
+            kc868a6::core::PropertySnapshot snapshot;
+            const auto read = blePresence_->readProperty(descriptors.data[i + 1].id, snapshot);
+            if (!read.ok()) { sendSettingsError(read, 500); return; }
+            device["in_range"] = std::get<bool>(snapshot.value);
+            device["quality"] = kc868a6::web::qualityName(snapshot.quality);
+        }
+    }
     String body;
-    serializeJson(response, body);
+    const size_t length = measureJson(response);
+    if (response.overflowed() || !body.reserve(length) ||
+        serializeJson(response, body) != length || body.length() != length) {
+        sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "ble_targets"}, 500); return;
+    }
     server_.send(200, "application/json", body);
 }
 

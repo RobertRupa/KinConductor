@@ -6,9 +6,12 @@ const test = require("node:test");
 function element() {
   return {
     children: [], dataset: {}, style: {}, value: "", textContent: "",
-    append(...items) { this.children.push(...items); },
+    append(...items) { for (const item of items) { item.parent = this; this.children.push(item); } },
     replaceChildren(...items) { this.children = items; },
-    addEventListener() {}, setAttribute() {}, querySelectorAll() { return []; }
+    remove() { this.parent.children = this.parent.children.filter(item => item !== this); },
+    addEventListener() {}, setAttribute() {},
+    querySelectorAll(selector) { return selector === "[data-capability]" ?
+      this.children.filter(item => item.dataset.capability) : []; }
   };
 }
 function fixture() {
@@ -139,4 +142,36 @@ test("UDP trigger configuration belongs to the IFTTT form, not the header", () =
   assert.ok(form.includes('id="iftttUdpFields"'));
   assert.ok(form.includes('id="iftttUdpPort"'));
   assert.ok(!html.slice(0, html.indexOf("</header>")).includes('id="iftttUdpFields"'));
+});
+test("IFTTT exposes each saved BLE MAC once and refreshes after descriptor changes with unchanged revision", async () => {
+  const data = fixture();
+  data.modules[0].properties = [
+    { id: "ble.presence/in_range", type: "boolean", quality: "disabled", value: false },
+    { id: "ble.presence/AA:BB:CC:DD:EE:01/in_range", type: "boolean", quality: "warming_up", value: null }
+  ];
+  const { api, elements } = harness(async () => ({
+    ok: true, headers: { get: () => "application/json" }, json: async () => data
+  }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(elements.get("iftttSource").children.length, 1);
+  assert.equal(elements.get("iftttSource").children[0].value, data.modules[0].properties[1].id);
+  assert.match(api.propertyLabel(data.modules[0].properties[1]), /AA:BB:CC:DD:EE:01.*in_range/);
+  // Real HTTP responses are separate objects, not a mutation of the previous response.
+  const second = structuredClone(data);
+  second.modules[0].properties.push(
+    { id: "ble.presence/AA:BB:CC:DD:EE:02/in_range", type: "boolean", quality: "valid", value: true }
+  );
+  let changingData = data;
+  const changing = harness(async () => ({
+    ok: true, headers: { get: () => "application/json" },
+    json: async () => structuredClone(changingData)
+  }));
+  await new Promise(resolve => setImmediate(resolve));
+  changingData = second;
+  await changing.api.refresh();
+  const options = changing.elements.get("iftttSource").children;
+  assert.equal(options.length, 2);
+  assert.deepEqual(options.map(option => option.value), [
+    "ble.presence/AA:BB:CC:DD:EE:01/in_range", "ble.presence/AA:BB:CC:DD:EE:02/in_range"
+  ]);
 });

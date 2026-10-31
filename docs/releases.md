@@ -4,6 +4,11 @@
 
 ## Build inputs and local validation
 
+Current version/tag: **1.1.1 / v1.1.1**, with eight independent saved BLE
+presence targets and the previous Settings/BLE/UDP fixes. Local firmware,
+filesystem and tests are verified; hardware upload and remote publication
+were not performed for this tag.
+
 Version 1.1.0 pins PlatformIO Core 6.2.0 in CI, the official pioarduino
 `55.03.312-1` platform release (Arduino ESP32 3.3.12 / IDF 5.5.5),
 and the tested library versions in [platformio.ini](../platformio.ini).
@@ -14,8 +19,8 @@ Node 18+ runs the dependency-free tests/packager; CI uses Node 22/Python 3.12.
 pio run -e kc868-a6 -e kc868-a6-coprocessor
 npm test
 pio run -e kc868-a6 -e kc868-a6-coprocessor -t buildfs
-npm run package:release -- kc868-a6 v1.1.0
-npm run package:release -- kc868-a6-coprocessor v1.1.0
+npm run package:release -- kc868-a6 v1.1.1
+npm run package:release -- kc868-a6-coprocessor v1.1.1
 ```
 
 Run builds sequentially with tests: dependency-resolution changes may replace
@@ -23,7 +28,7 @@ Run builds sequentially with tests: dependency-resolution changes may replace
 only with the coprocessor profile, use
 `PIO_ENV=kc868-a6-coprocessor npm test`.
 
-Outputs are under ignored `dist/releases/v1.1.0/<profile>/`:
+Outputs are under ignored `dist/releases/v1.1.1/<profile>/`:
 
 | Image | Purpose / serial offset |
 | --- | --- |

@@ -251,3 +251,19 @@ immutable tag.
 Browser pointer automation timed out; DOM interaction/layout tests are not
 an exhaustive pointer/accessibility audit. Current sensor calibration, fan
 waveforms and every optional peripheral remain hardware acceptance work.
+
+## Multi-device BLE release validation — v1.1.1
+
+Local validation: native ASan/UBSan suites plus **21 JavaScript tests** pass.
+Both maintained firmware profiles and matching LittleFS build successfully.
+Base image **1,543,376 bytes**, coprocessor **1,543,552 bytes**; unchanged
+OTA slot leaves **29,488 / 29,312 bytes**. Static RAM **78,448 bytes**.
+The maximum eight-module/eight-device capabilities response fits its JSON
+budget in the native regression test; target heap stress remains unverified.
+
+A static local preview with synthetic eight-device data checked saved cards,
+visible removal buttons and no horizontal overflow at 390/860/1200 px.
+It had no firmware APIs and did not interact with hardware. This does not
+prove physical BLE range transitions, NVS power-loss behavior or a successful
+GitHub Actions run. Firmware was **not uploaded** as part of this release;
+update both firmware and LittleFS when deploying.

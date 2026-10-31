@@ -3,7 +3,7 @@
 PlatformIO firmware for the KinCony KC868-A6 ESP32-WROOM-32 controller.
 The current refactor provides typed peripheral contracts, ADC/IO and sensor
 capabilities, dynamic IO/action and settings forms, configurable OLED page grids,
-BLE presence, Wi-Fi/UDP/serial automation, configurable PWM outputs,
+up to eight independent BLE presence targets, Wi-Fi/UDP/serial automation, configurable PWM outputs,
 calibrated current-input interfaces, configurable hostname/mDNS, hardware
 header telemetry, versioned configuration persistence and board-resource diagnostics.
 The full expansion plan is **not complete**.
@@ -41,6 +41,10 @@ For independent listeners, choose **IFTTT → UDP packet on rule port** and set
 the local port, sender filters and text match. Listeners bind to `0.0.0.0`;
 outgoing destination address/port/data belong to IO/IFTTT send actions.
 The default LAN name is `http://kinconductor.local/`.
+Version **1.1.1** adds a saved BLE list in **Interfaces**. Each MAC appears
+separately in IFTTT as `BLE · MAC · in_range (1/0)` and is available in IO/OLED.
+Use `== 1` for entry and `== 0` for leave; initial unseen devices remain
+`warming_up`, not a valid leave event. See [BLE list details](./docs/peripherals.md#saved-ble-devices--v111).
 The [release workflow](./.github/workflows/release.yml) builds both profiles
 on branch pushes, pull requests and manual runs; releases require `v*` tags.
 Local builds/packages are verified; publication and a GitHub

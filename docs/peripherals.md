@@ -92,7 +92,7 @@ not previews. See [architecture and limits](./refactoring.md#capability-driven-s
 
 Choose **DHT11** from either GPIO32/33 sensor list when that model is connected.
 For BLE, select an ID in the scanner list and explicitly save it. Use
-`ble.presence/in_range == 1` for entry or `== 0` for leave; timeout is
+`ble.presence/<MAC>/in_range == 1` for entry or `== 0` for leave; timeout is
 configurable in Interfaces/Settings. Before the first sighting there is no
 valid leave signal. Private/random MAC addresses may change.
 
@@ -136,6 +136,48 @@ nonblocking scanner, not a fresh blocking discovery on each click. A healthy
 empty cache is not an error. Backend failures return HTTP 503 with an explicit
 error displayed by the UI. Temporary MAC buffers are copied into JSON rather
 than borrowed; all returned addresses remain valid after serialization.
+
+### Saved BLE devices — v1.1.1
+
+In **Interfaces**, select a scanned MAC or enter it manually, then choose
+**Add ID**. Up to **eight distinct saved MACs** persist in NVS; duplicates,
+invalid addresses and a ninth entry are rejected. Remove an individual device
+using **Remove ID** next to its saved entry. An empty input does not clear the list.
+
+Each saved device provides a stable Boolean property such as
+`ble.presence/AA:BB:CC:DD:EE:01/in_range`. IFTTT lists these individually with
+the MAC and `in_range`; IO and OLED grids use the same IDs. New IFTTT selectors
+do not show the old generic BLE alias. Four IFTTT rules remain the system limit,
+independent of the eight-device tracking limit.
+
+Each device has its own last sighting and timeout state, using the shared
+`blePresenceTimeoutSeconds` setting. A continuously observed advertisement
+refreshes only its own state. Devices are tracked even if the 24-entry scan
+display cache is full. Before the first sighting the quality is `warming_up`;
+scanner disabled/failure is `unavailable`, never a valid departure. Reordering
+or adding devices preserves sightings for unchanged MACs. Removed MAC IDs
+are no longer available, so referencing rules cannot fire; edit those rules
+or re-add the same device. Private rotating MACs remain unreliable identities.
+
+`GET /api/bluetooth/targets` returns the saved addresses plus per-device
+`property`, `in_range`, and `quality`. `POST` replaces the complete list:
+
+```json
+{"schemaVersion":1,"addresses":["AA:BB:CC:DD:EE:01","AA:BB:CC:DD:EE:02"]}
+```
+
+The stored `ble_targets` record also retains `legacyAddress` for compatibility.
+When the record is absent, the previous `ble_target` MAC is imported; the new
+record is written on the next successful save. Exact write/readback is required
+before runtime publication; invalid/corrupt records return explicit errors,
+not an empty successful list. Older firmware does not understand the new list.
+
+Existing rules using `ble.presence/in_range` still refer to the original
+legacy MAC, **not the first item after reordering**. Removing that MAC disables
+its alias rather than retargeting it. The old single-target endpoint remains
+compatible for zero/one saved entry; writes with multiple entries return
+HTTP 409 directing callers to the list endpoint, to prevent accidental loss.
+For newly created devices use the MAC-specific properties.
 
 ### Rule-specific UDP triggers
 

@@ -60,12 +60,11 @@ void Esp32BlePresenceScanner::stop() {
     scanner_ = nullptr;
 }
 
-void Esp32BlePresenceScanner::setTarget(const BleAddress *address) {
+void Esp32BlePresenceScanner::setTargets(const BleTargets &targets) {
     portENTER_CRITICAL(&mutex_);
-    hasTarget_ = address != nullptr;
-    target_ = address ? *address : BleAddress{};
-    cache_.targetObserved = false;
-    cache_.targetSeenAtMs = 0;
+    targets_ = targets;
+    cache_.targetObserved = {};
+    cache_.targetSeenAtMs = {};
     portEXIT_CRITICAL(&mutex_);
 }
 
@@ -76,7 +75,7 @@ core::Result Esp32BlePresenceScanner::poll(BleScanSnapshot &snapshot) {
     }
     portENTER_CRITICAL(&mutex_);
     snapshot = cache_;
-    cache_.targetObserved = false;
+    cache_.targetObserved = {};
     portEXIT_CRITICAL(&mutex_);
     return {};
 }
@@ -113,9 +112,9 @@ void Esp32BlePresenceScanner::observe(const NimBLEAdvertisedDevice *device) {
 
     portENTER_CRITICAL(&mutex_);
     if (accepting_) {
-        if (hasTarget_ && entry.address == target_) {
-            cache_.targetObserved = true;
-            cache_.targetSeenAtMs = entry.seenAtMs;
+        for (size_t i = 0; i < targets_.count; ++i) if (entry.address == targets_.addresses[i]) {
+            cache_.targetObserved[i] = true;
+            cache_.targetSeenAtMs[i] = entry.seenAtMs;
         }
         size_t index = 0;
         while (index < cache_.count &&

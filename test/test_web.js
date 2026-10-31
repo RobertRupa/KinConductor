@@ -4,6 +4,71 @@ const vm = require("node:vm");
 const test = require("node:test");
 
 const source = fs.readFileSync("data/app.js", "utf8");
+function bleTargetsFixture(addresses) {
+  return { schemaVersion: 1, capacity: 8, addresses,
+    devices: addresses.map(address => ({
+      address, property: `ble.presence/${address}/in_range`, in_range: false, quality: "warming_up"
+    })) };
+}
+test("saved BLE list adds eight independent MACs, rejects duplicates/full lists and removes only selected ID", async () => {
+  const elements = new Map();
+  const makeElement = () => ({
+    ...element(), value: "", disabled: false, listeners: {},
+    addEventListener(type, callback) { this.listeners[type] = callback; }
+  });
+  const get = id => { if (!elements.has(id)) elements.set(id, makeElement()); return elements.get(id); };
+  let addresses = [];
+  let refreshes = 0;
+  const posts = [];
+  const context = vm.createContext({
+    $: get, document: { createElement: makeElement }, t: key => key,
+    window: { CapabilityUI: {
+      refresh: async () => { ++refreshes; },
+      request: async (url, body) => {
+        assert.equal(url, "/api/bluetooth/targets");
+        if (body) { posts.push(body); addresses = Array.from(body.addresses); }
+        return bleTargetsFixture(addresses);
+      }
+    } }
+  });
+  const start = source.indexOf("async function loadBleTarget()");
+  const finish = source.indexOf('$("#language").addEventListener', start);
+  vm.runInContext(source.slice(start, finish), context);
+  const add = get("#bleTargetSave").listeners.click;
+  for (let i = 1; i <= 8; ++i) {
+    get("#bleTarget").value = `aa:bb:cc:dd:ee:0${i}`;
+    await add();
+    assert.equal(addresses.length, i);
+    assert.equal(get("#bleSavedCount").textContent, `${i} / 8`);
+    assert.equal(get("#bleTarget").value, "");
+  }
+  assert.equal(refreshes, 8);
+  assert.equal(get("#bleSavedTargets").children.length, 8);
+  get("#bleTarget").value = "AA:BB:CC:DD:EE:01";
+  await add();
+  assert.equal(get("#bleTargetMessage").textContent, "bleDuplicateId");
+  get("#bleTarget").value = "AA:BB:CC:DD:EE:09";
+  await add();
+  assert.equal(get("#bleTargetMessage").textContent, "bleTargetLimit");
+  get("#bleTarget").value = "";
+  await add();
+  assert.equal(get("#bleTargetMessage").textContent, "bleInvalidId");
+  assert.equal(posts.length, 8);
+  const first = get("#bleSavedTargets").children[0];
+  await first.children[1].listeners.click();
+  assert.equal(addresses.length, 7);
+  assert.equal(addresses[0], "AA:BB:CC:DD:EE:02");
+  assert.equal(get("#bleSavedCount").textContent, "7 / 8");
+  assert.equal(refreshes, 9);
+  const remaining = get("#bleSavedTargets").children[0];
+  assert.equal(remaining.children[0].children[0].textContent, addresses[0]);
+  assert.equal(remaining.children[0].children[1].textContent, "in_range: warming_up");
+  assert.throws(() => context.validateBleTargetsResponse({ ...bleTargetsFixture(addresses), devices: [] }));
+  context.window.CapabilityUI.request = async () => { throw Error("storage unavailable"); };
+  await context.loadBleTarget();
+  assert.equal(get("#bleSavedTargets").children.length, 0);
+  assert.equal(get("#bleTargetMessage").textContent, "storage unavailable");
+});
 const begin = source.indexOf("async function refreshBoardStatus()");
 const end = source.indexOf("function renderStatus(", begin);
 assert(begin !== -1 && end > begin);
