@@ -9,6 +9,8 @@
 #include "peripherals/ble_presence.h"
 #include "peripherals/transport.h"
 #include "peripherals/current_inputs.h"
+#include "peripherals/udp_rules.h"
+#include "web/ble_scan.h"
 #include <cassert>
 #include <iostream>
 #include <cstring>
@@ -59,6 +61,16 @@ public:
     void stop() override {}
     void setTarget(const peripherals::BleAddress *) override {}
     core::Result poll(peripherals::BleScanSnapshot &scan) override { scan = {}; return {}; }
+};
+class FakeRuleUdp final : public peripherals::IUdpRulesHardware {
+public:
+    bool connected() const override { return true; }
+    core::Result open(uint8_t, uint16_t) override { return {}; }
+    void close(uint8_t) override {}
+    core::Result receive(uint8_t, char *, size_t, size_t &size,
+                        std::array<uint8_t, 4> &, uint16_t &, bool &received) override {
+        size = 0; received = false; return {};
+    }
 };
 class FakeTransport final : public peripherals::ITransportHardware {
 public:
@@ -200,10 +212,13 @@ void testCapabilityJson() {
     assert(registry.add({&transport, &transport, &transport, &transport}).ok());
     peripherals::CurrentInputs current{registry};
     assert(registry.add({&current, &current, &current, nullptr}).ok());
+    FakeRuleUdp udpHardware;
+    peripherals::UdpRules udp{udpHardware};
+    assert(registry.add({&udp, &udp, &udp, nullptr}).ok());
     assert(registry.begin(50).ok());
     document.clear();
     assert(web::writeCapabilities(document.to<JsonObject>(), registry, 50).ok());
-    assert(document["modules"].size() == 7 && !document.overflowed());
+    assert(document["modules"].size() == 8 && !document.overflowed());
     std::string json;
     serializeJson(document, json);
     assert(json.size() < web::capabilitiesJsonCapacity);
@@ -213,6 +228,25 @@ void testCapabilityJson() {
     document.clear();
     assert(!deserializeJson(document, R"({"id":"io.main/relay/set\u0000ignored","parameters":{"channel":1,"on":true}})"));
     assert(!web::executeJsonAction(registry, document.as<JsonVariantConst>(), false).result.ok());
+}
+void testBleScanJson() {
+    peripherals::BleScanSnapshot scan;
+    scan.count = scan.capacity;
+    for (size_t index = 0; index < scan.count; ++index) {
+        scan.devices[index].name.fill('x'); scan.devices[index].name.back() = 0;
+        scan.devices[index].address.fill(index);
+        scan.devices[index].rssi = -99;
+    }
+    DynamicJsonDocument doc(web::bleScanJsonCapacity);
+    assert(web::writeBleScan(doc.to<JsonObject>(), scan).ok() && !doc.overflowed());
+    std::string json; serializeJson(doc, json);
+    doc.clear();
+    assert(!deserializeJson(doc, json));
+    assert(doc["devices"].size() == 24 && doc["devices"][23]["name"].as<std::string>().size() == 31);
+    assert(doc["devices"][0]["address"] == "00:00:00:00:00:00");
+    assert(doc["devices"][23]["address"] == "17:17:17:17:17:17");
+    StaticJsonDocument<32> tiny;
+    assert(!web::writeBleScan(tiny.to<JsonObject>(), scan).ok());
 }
 void testLayouts() {
     FakeIo hardware;
@@ -285,6 +319,6 @@ void testLayouts() {
 }
 void runCapabilitiesTests() {
     testFanAndConditions();
-    testIoAndActions(); testCapabilityJson(); testLayouts();
-    std::cout << "PASS: 4 end-to-end groups (PWM/IFTTT edges, IO/action validation, capabilities/schema, screen layout)\n";
+    testIoAndActions(); testCapabilityJson(); testLayouts(); testBleScanJson();
+    std::cout << "PASS: 5 end-to-end groups (PWM/IFTTT, IO, capabilities/schema, screen, BLE JSON)\n";
 }

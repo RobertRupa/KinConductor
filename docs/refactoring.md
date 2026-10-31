@@ -275,3 +275,28 @@ six-module capabilities response fitting a 24 KiB JSON workspace. Real board
 API, UDP and browser checks are recorded in [deployment](./build.md#extension-deployment--2026-10-31).
 Sensor hardware, BLE range transitions, UART peer delivery and oscilloscope
 waveforms still require their respective attached devices.
+
+## Settings, BLE serialization and rule UDP
+
+Dashboard nested grids now constrain children with `min-width:0` and use two
+DI columns within desktop panels; the existing mobile four-column layout
+fits its wider single panel. Settings groups are a presentation layer over
+the same 33-field record, not new per-module configuration ownership.
+
+The portable BLE serializer owns temporary MAC strings, budgets 24 devices
+and validates the measured output length. Its callback returns a typed result;
+API failures produce HTTP 503 rather than success-shaped malformed JSON.
+
+`UdpRules` implements lifecycle, property and trigger contracts through an
+`IUdpRulesHardware` adapter. The portable codec validates saved `udpPacket`
+rules and conflicts before NVS writes; the ESP32 adapter owns four WiFiUDP
+sockets. Pending packet matches use the existing action dispatcher, without
+changing legacy rules' edge semantics. See [configuration and limits](./peripherals.md#rule-specific-udp-triggers).
+
+There are now **eight modules and 55 properties**. The registry's eight-module
+limit is filled; a ninth requires an explicit capacity/JSON/memory review.
+Native regression tests cover all eight modules' JSON budget and all 24 BLE
+addresses after serialization. Validation/deployment evidence is in
+[the latest deployment](./build.md#settings-ble-and-rule-udp-deployment--2026-10-31).
+Project workflow context is in [LLM memory](./llm-memory.md).
+This slice does not complete the full architectural plan.

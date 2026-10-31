@@ -379,6 +379,19 @@
       $("screenMessage").textContent = "";
     } catch (error) { $("screenMessage").textContent = error.message; }
   }
+  function settingsGroup(id) {
+    if (/^(sensor|gpio3|temperature|bme|ens|compass|gps|rtc|pn532)/.test(id)) return "sensors";
+    if (/^display/.test(id)) return "screen";
+    if (/^(beeper|fan)/.test(id)) return "outputs";
+    if (/^bluetooth|^ble/.test(id)) return "bluetooth";
+    if (/^(udp|uart|rs485|i2c)/.test(id)) return "interfaces";
+    return "inputs";
+  }
+  function groupedSettings(fields) {
+    return ["interfaces", "bluetooth", "sensors", "outputs", "inputs", "screen"]
+      .map((id) => ({ id, fields: fields.filter((field) => settingsGroup(field.id) === id) }))
+      .filter((group) => group.fields.length);
+  }
   async function loadSettings() {
     try {
       const [fields, settings] = await Promise.all([request("/api/settings/schema"), request("/api/settings")]);
@@ -390,22 +403,35 @@
       schema = fields;
       settingsControls = new Map();
       $("schemaFields").replaceChildren();
-      for (const field of fields.fields) {
-        const label = node("label", field.id);
-        let input;
-        if (field.allowedValues.length) {
-          input = node("select");
-          for (const value of field.allowedValues) {
-            const option = node("option", value); option.value = value; input.append(option);
+      const titles = {
+        interfaces: ["Magistrale i UDP", "Buses and UDP"], bluetooth: ["Bluetooth i obecność BLE", "Bluetooth and BLE presence"],
+        sensors: ["Sensory i próbkowanie", "Sensors and sampling"], outputs: ["Wyjścia · PWM i beeper", "Outputs · PWM and beeper"],
+        inputs: ["Wejścia", "Inputs"], screen: ["Ekran OLED", "OLED screen"]
+      };
+      for (const group of groupedSettings(fields.fields)) {
+        const section = node("details"); section.className = "settings-accordion";
+        section.dataset.settingsGroup = group.id;
+        section.append(node("summary", text(...titles[group.id])));
+        const container = node("div"); container.className = "schema-fields";
+        for (const field of group.fields) {
+          const label = node("label", field.id);
+          let input;
+          if (field.allowedValues.length) {
+            input = node("select");
+            for (const value of field.allowedValues) {
+              const option = node("option", value); option.value = value; input.append(option);
+            }
+          } else {
+            input = node("input"); input.type = field.type === "boolean" ? "checkbox" : "number";
+            if (field.type !== "boolean") { input.min = field.minimum; input.max = field.maximum; input.step = "1"; }
           }
-        } else {
-          input = node("input"); input.type = field.type === "boolean" ? "checkbox" : "number";
-          if (field.type !== "boolean") { input.min = field.minimum; input.max = field.maximum; input.step = "1"; }
+          if (field.type === "boolean") input.checked = settings[field.id];
+          else input.value = settings[field.id];
+          input.disabled = field.derived;
+          if (field.type === "boolean") label.className = "is-boolean";
+          label.append(input); container.append(label); settingsControls.set(field.id, input);
         }
-        if (field.type === "boolean") input.checked = settings[field.id];
-        else input.value = settings[field.id];
-        input.disabled = field.derived;
-        label.append(input); $("schemaFields").append(label); settingsControls.set(field.id, input);
+        section.append(container); $("schemaFields").append(section);
       }
       $("schemaMessage").textContent = "";
     } catch (error) { $("schemaMessage").textContent = error.message; }
@@ -502,7 +528,7 @@
     } catch (error) { $("networkSettingsMessage").textContent = error.message; }
   }
   window.CapabilityUI = {
-    validateCapabilities, validateLayout, validateCurrent, properties, actions, commandFrom, request, propertyLabel,
+    validateCapabilities, validateLayout, validateCurrent, groupedSettings, properties, actions, commandFrom, request, propertyLabel,
     getIftttCommand() {
       const action = capabilities && actions(capabilities).find((item) => item.id === $("iftttCapabilityAction").value);
       if (!action) throw new Error("No interface action available");

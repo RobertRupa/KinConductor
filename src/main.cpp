@@ -27,6 +27,8 @@
 #include "web/capabilities.h"
 #include "peripherals/fan_control.h"
 #include "core/ifttt_condition.h"
+#include "peripherals/esp32_udp_rules.h"
+#include "web/ble_scan.h"
 #include "peripherals/ble_presence.h"
 #include "peripherals/esp32_ble_presence_scanner.h"
 #include "peripherals/transport.h"
@@ -165,6 +167,8 @@ kc868a6::peripherals::BlePresence blePresence{bleScanner};
 kc868a6::peripherals::Esp32TransportHardware transportHardware{Serial1, Serial2};
 kc868a6::peripherals::Transport transport{transportHardware};
 kc868a6::peripherals::CurrentInputs currentInputs{peripheralRegistry};
+kc868a6::peripherals::Esp32UdpRulesHardware udpRulesHardware;
+kc868a6::peripherals::UdpRules udpRules{udpRulesHardware};
 
 #if defined(USE_RADIO_NRF24)
 RF24 nrf24(kc868a6::gpio::nrf24Ce, kc868a6::gpio::spiCs);
@@ -232,7 +236,7 @@ kc868a6::core::ConditionState iftttConditions[4] = {};
 uint32_t lastIftttMs = 0;
 
 void configureBluetooth(uint8_t mode);
-String scanBluetoothDevices();
+kc868a6::core::Result scanBluetoothDevices(String &response);
 #if defined(USE_RADIO_NRF24)
 bool sendNrf24Packet(uint32_t payload);
 #endif
@@ -769,6 +773,7 @@ void initializePeripherals() {
     reportCoreError(peripheralRegistry.add({&blePresence, &blePresence, &blePresence, nullptr}));
     reportCoreError(peripheralRegistry.add({&transport, &transport, &transport, &transport}));
     reportCoreError(peripheralRegistry.add({&currentInputs, &currentInputs, &currentInputs, nullptr}));
+    reportCoreError(peripheralRegistry.add({&udpRules, &udpRules, &udpRules, nullptr}));
     if (registered.ok()) reportCoreError(peripheralRegistry.begin(millis()));
 
     pinMode(kc868a6::gpio::sensor1, INPUT);
@@ -896,35 +901,21 @@ void configureBluetooth(uint8_t mode) {
     blePresence.setScanAvailable(mode == 1 && bluetoothReady, millis());
 }
 
-String scanBluetoothDevices() {
-    DynamicJsonDocument document(6144);
-    JsonArray devices = document["devices"].to<JsonArray>();
+kc868a6::core::Result scanBluetoothDevices(String &response) {
     if (webUi.settings().bluetoothMode != 1 || !bluetoothReady) {
-        document["error"] = "ble_scan_disabled";
-    } else {
-        kc868a6::peripherals::BleScanSnapshot scan;
-        const auto result = blePresence.scanResults(millis(), scan);
-        reportCoreError(result);
-        if (!result.ok()) {
-            document["error"] = kc868a6::core::errorCodeName(result.code);
-        } else {
-            for (size_t index = 0; index < scan.count; ++index) {
-                const auto &item = scan.devices[index];
-                JsonObject device = devices.createNestedObject();
-                const auto mac = kc868a6::peripherals::BlePresence::formatMac(item.address);
-                device["name"] = item.name[0] ? item.name.data() : "(unnamed)";
-                device["address"] = mac.data();
-                device["rssi"] = item.rssi;
-            }
-        }
+        return {kc868a6::core::ErrorCode::Unavailable, "ble_scan_disabled"};
     }
-    if (document.overflowed()) {
-        reportCoreError({kc868a6::core::ErrorCode::CapacityExceeded, "ble_scan_json"});
-        return "{\"error\":\"capacity_exceeded\",\"devices\":[]}";
+    kc868a6::peripherals::BleScanSnapshot scan;
+    auto result = blePresence.scanResults(millis(), scan);
+    if (!result.ok()) return result;
+    DynamicJsonDocument document(kc868a6::web::bleScanJsonCapacity);
+    result = kc868a6::web::writeBleScan(document.to<JsonObject>(), scan);
+    if (!result.ok()) return result;
+    const size_t length = measureJson(document);
+    if (!response.reserve(length) || serializeJson(document, response) != length || response.length() != length) {
+        return {kc868a6::core::ErrorCode::CapacityExceeded, "ble_scan_response"};
     }
-    String response;
-    serializeJson(document, response);
-    return response;
+    return {};
 }
 
 #if defined(USE_RADIO_NRF24)
@@ -1001,14 +992,21 @@ void updateIftttRules(const String &rules) {
     for (auto &condition : iftttConditions) condition = {};
     DynamicJsonDocument document(8192);
     if (deserializeJson(document, rules) || !document.is<JsonArray>()) {
+        udpRules.configure({});
         reportCoreError({kc868a6::core::ErrorCode::InvalidArgument, "ifttt_stored_rules"});
         return;
     }
+    kc868a6::peripherals::UdpRulesConfig udpConfig;
+    const auto parsed = kc868a6::peripherals::readUdpRules(
+        document.as<JsonVariantConst>(), webUi.settings().udpListenPort, udpConfig);
+    reportCoreError(parsed);
+    udpRules.configure(parsed.ok() ? udpConfig : kc868a6::peripherals::UdpRulesConfig{});
     const uint8_t count = document.as<JsonArray>().size();
     recordEvent("IFTTT: aktywne reguły " + String(count) + ".");
 }
 
 void evaluateIftttRules() {
+    reportCoreError(udpRules.tick(millis()));
     DynamicJsonDocument document(8192);
     if (deserializeJson(document, iftttRulesJson) || !document.is<JsonArray>()) {
         reportCoreError({kc868a6::core::ErrorCode::InvalidArgument, "ifttt_runtime_rules"});
@@ -1017,15 +1015,20 @@ void evaluateIftttRules() {
     uint8_t ruleIndex = 0;
     for (JsonObject rule : document.as<JsonArray>()) {
         if (ruleIndex >= 4) break;
-        bool fire = false;
+        uint8_t fires = 0;
+        const uint8_t udpMatches = udpRules.consume(ruleIndex);
         if (rule["enabled"] | false) {
-            const double value = iftttValue(rule["source"] | "");
-            const double threshold = rule["threshold"] | 0.0;
-            fire = iftttConditions[ruleIndex].fires(value, threshold, rule["comparison"] | "");
+            if (strcmp(rule["source"] | "", "udpPacket") == 0) {
+                fires = udpMatches;
+            } else {
+                const double value = iftttValue(rule["source"] | "");
+                const double threshold = rule["threshold"] | 0.0;
+                fires = iftttConditions[ruleIndex].fires(value, threshold, rule["comparison"] | "") ? 1 : 0;
+            }
         } else {
             iftttConditions[ruleIndex] = {};
         }
-        if (fire) {
+        for (uint8_t firing = 0; firing < fires; ++firing) {
             const String ruleName = "Reguła " + String(ruleIndex + 1);
             recordEvent("IFTTT: " + ruleName + " wyzwolona.");
             const char *action = rule["action"] | "relay";

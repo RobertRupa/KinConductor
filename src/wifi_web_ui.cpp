@@ -8,6 +8,7 @@
 #include "config/settings_json.h"
 #include "web/board_status.h"
 #include "web/capabilities.h"
+#include "peripherals/udp_rules.h"
 
 namespace {
 
@@ -576,6 +577,15 @@ void WifiWebUi::handleSettings(bool save) {
             return;
         }
         const bool changed = !kc868a6::config::equalSettings(settings(), candidate);
+        DynamicJsonDocument rules(8192);
+        kc868a6::peripherals::UdpRulesConfig udpConfig;
+        if (deserializeJson(rules, preferences_.getString("ifttt", "[]"))) {
+            sendSettingsError({kc868a6::core::ErrorCode::InvalidArgument, "ifttt_stored_rules"}, 409);
+            return;
+        }
+        const auto ports = kc868a6::peripherals::readUdpRules(
+            rules.as<JsonVariantConst>(), candidate.udpListenPort, udpConfig);
+        if (!ports.ok()) { sendSettingsError(ports, 409); return; }
         const auto stored = configuration_.update(candidate);
         if (!stored.ok()) {
             sendSettingsError(stored,
@@ -604,7 +614,11 @@ void WifiWebUi::handleIfttt(bool save) {
     }
     String rulesJson = preferences_.getString("ifttt", "[]");
     if (save) {
-        DynamicJsonDocument request(2048);
+        if (server_.arg("plain").length() > 8192) {
+            sendSettingsError({kc868a6::core::ErrorCode::CapacityExceeded, "ifttt"}, 413);
+            return;
+        }
+        DynamicJsonDocument request(8192);
         if (deserializeJson(request, server_.arg("plain")) || !request.is<JsonArray>()) {
             server_.send(400, "application/json", "{\"error\":\"invalid_rules\"}");
             return;
@@ -613,6 +627,13 @@ void WifiWebUi::handleIfttt(bool save) {
         JsonArray rules = request.as<JsonArray>();
         if (rules.size() > 4) {
             server_.send(400, "application/json", "{\"error\":\"too_many_rules\"}");
+            return;
+        }
+        kc868a6::peripherals::UdpRulesConfig udpConfig;
+        const auto validUdp = kc868a6::peripherals::readUdpRules(
+            request.as<JsonVariantConst>(), settings().udpListenPort, udpConfig);
+        if (!validUdp.ok()) {
+            sendSettingsError(validUdp, validUdp.code == kc868a6::core::ErrorCode::ResourceConflict ? 409 : 400);
             return;
         }
 
@@ -633,7 +654,7 @@ void WifiWebUi::handleIfttt(bool save) {
             const uint8_t page = rule["page"] | 0;
             const float threshold = rule["threshold"] | 0.0F;
             const char *action = rule["action"] | "relay";
-            bool sourceAllowed = registry_.findProperty(source) != nullptr;
+            bool sourceAllowed = registry_.findProperty(source) != nullptr || strcmp(source, "udpPacket") == 0;
             for (const char *candidate : allowedSources) {
                 if (strcmp(source, candidate) == 0) sourceAllowed = true;
             }
@@ -664,7 +685,7 @@ void WifiWebUi::handleIfttt(bool save) {
                  kc868a6::web::executeJsonAction(registry_, rule["command"], false).result.ok()) ||
                 (strcmp(action, "oledPage") == 0 && page >= 1 && page <= 3);
             if (!rule["enabled"].is<bool>() || !sourceAllowed ||
-                !comparisonAllowed || !actionAllowed ||
+                !(strcmp(source, "udpPacket") == 0 || comparisonAllowed) || !actionAllowed ||
                 !isfinite(threshold)) {
                 server_.send(400, "application/json", "{\"error\":\"invalid_rule\"}");
                 return;
@@ -688,7 +709,9 @@ void WifiWebUi::handleBluetoothScan() {
         server_.send(409, "application/json", "{\"error\":\"ble_scan_disabled\"}");
         return;
     }
-    const String devices = bluetoothScanner_();
+    String devices;
+    const auto scan = bluetoothScanner_(devices);
+    if (!scan.ok()) { sendSettingsError(scan, 503); return; }
     server_.send(200, "application/json", devices);
 }
 

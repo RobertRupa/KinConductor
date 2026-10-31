@@ -262,7 +262,7 @@
           <select id="beeperDuration" name="beeperDurationMs"><option value="100">100 ms</option><option value="250">250 ms</option><option value="500">500 ms</option><option value="1000">1 s</option></select>
           <div class="test-row"><button class="secondary-button" id="beeperTestButton" type="button" data-i18n="testBeeper">Test beepera</button><span id="beeperTestMessage" role="status"></span></div>
           <div class="settings-subhead"><span>PWM · 0–10 V converter</span></div>
-          <label class="setting-row"><span><strong>PWM output</strong><small>3.3 V PWM only; external PWM→0–10 V converter required. Not AC triac control.</small></span><input type="checkbox" name="fanEnabled"><i></i></label>
+          <label class="setting-row"><span><strong>PWM output</strong><small>GPIO: 3.3 V PWM. DA: onboard LM258 conditioning; verify waveform/filtering. Not AC triac control.</small></span><input type="checkbox" name="fanEnabled"><i></i></label>
           <label class="field-label" for="fanPin">PWM · wyjście / output</label>
           <select id="fanPin" name="fanPin"><option value="25">DAC2 · DA-2 · GPIO25</option><option value="26">DAC1 · DA-1 · GPIO26</option></select>
           <label class="field-label" for="fanFrequencyHz">PWM Hz</label>
@@ -318,7 +318,9 @@
 
     <section class="page-view" id="settingsPage" role="tabpanel" hidden>
       <div class="view-heading"><h1 data-i18n="pageSettings">Ustawienia</h1><p data-i18n="settingsSchemaDescription">Formularz generowany ze schematu konfiguracji firmware.</p></div>
-      <form id="networkSettingsForm" class="panel">
+      <details class="panel settings-accordion" open>
+        <summary data-i18n="networkIdentity">Sieć · hostname i mDNS</summary>
+      <form id="networkSettingsForm">
         <h2 data-i18n="networkIdentity">Sieć · hostname i mDNS</h2>
         <label class="field-label" for="hostname">Hostname</label>
         <input id="hostname" name="hostname" maxlength="63" pattern="[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?" required value="kinconductor">
@@ -327,8 +329,9 @@
         <button type="submit" class="primary-button" data-i18n="saveSettings">Zapisz ustawienia</button>
         <p id="networkSettingsMessage" role="status"></p>
       </form>
+      </details>
       <form id="schemaSettingsForm" class="panel">
-        <div id="schemaFields" class="schema-fields"></div>
+        <div id="schemaFields"></div>
         <button type="submit" class="primary-button" data-i18n="saveSettings">Zapisz ustawienia</button>
         <p id="schemaMessage" role="status"></p>
       </form>
@@ -380,11 +383,26 @@
           <label class="field-label" for="iftttSource" data-i18n="ifSource">Jeśli odczyt</label>
           <select id="iftttSource">
             <option value="buttonS2" data-i18n="sourceS2">Przycisk S2</option>
+            <option value="udpPacket" data-i18n="udpPacketSource">UDP · pakiet na porcie reguły</option>
           </select>
-          <div class="ifttt-condition-row">
+          <div class="ifttt-condition-row" id="iftttNumericCondition">
             <select id="iftttComparison" aria-label="Comparison"><option value=">">&gt;</option><option value="<">&lt;</option><option value=">=">≥</option><option value="<=">≤</option><option value="==">=</option><option value="!=">≠</option><option value="changed">Zmiana / Changed</option></select>
             <input id="iftttThreshold" type="number" step="any" value="25" aria-label="Threshold">
           </div>
+          <fieldset id="iftttUdpFields" hidden>
+            <legend data-i18n="udpPacketSource">UDP · pakiet na porcie reguły</legend>
+            <label class="field-label" for="iftttUdpPort" data-i18n="udpRulePort">Lokalny port odbioru</label>
+            <input id="iftttUdpPort" type="number" min="1" max="65535" step="1" value="5000">
+            <label class="field-label" for="iftttUdpRemoteIp" data-i18n="udpRemoteIp">IP nadawcy (puste = dowolny)</label>
+            <input id="iftttUdpRemoteIp" type="text" maxlength="15" placeholder="192.168.69.100">
+            <label class="field-label" for="iftttUdpRemotePort" data-i18n="udpRemotePort">Port nadawcy (0 = dowolny)</label>
+            <input id="iftttUdpRemotePort" type="number" min="0" max="65535" step="1" value="0">
+            <label class="field-label" for="iftttUdpMatch" data-i18n="udpTextMatch">Dopasowanie treści</label>
+            <select id="iftttUdpMatch"><option value="exact" data-i18n="udpExact">Równa</option><option value="contains" data-i18n="udpContains">Zawiera</option></select>
+            <label class="field-label" for="iftttUdpText" data-i18n="udpText">Tekst pakietu (puste = dowolny)</label>
+            <input id="iftttUdpText" type="text" maxlength="256">
+            <p class="field-hint" data-i18n="udpRuleHelp">Port jest przypisany do reguły, bind 0.0.0.0. Reguły z tym samym portem współdzielą odbiornik. Nie używaj globalnego portu UDP ani 5353 (mDNS). Maks. 256 bajtów UTF-8.</p>
+          </fieldset>
           <label class="field-label" for="iftttAction" data-i18n="thenAction">Wtedy wykonaj</label>
           <select id="iftttAction"><option value="relay" data-i18n="actionRelay">Steruj przekaźnikiem</option><option value="beeper" data-i18n="actionBeeper">Uruchom buzzer</option><option value="rf24Send" data-i18n="actionRf24">Nadaj payload RF24</option><option value="rf24Saved" data-i18n="actionRf24Saved">Odtwórz zapisany RF24</option><option value="oledPage" data-i18n="actionOled">Pokaż stronę OLED</option><option value="capability" data-i18n="capabilityAction">Akcja interfejsu</option></select>
           <div id="iftttCapabilityFields" hidden><select id="iftttCapabilityAction"></select><div id="iftttCapabilityParameters"></div></div>

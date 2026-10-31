@@ -1,7 +1,7 @@
 {
   "name": "kinconductor",
   "version": "1.1.0",
-  "description": "KinConductor KC868-A6 firmware with calibrated current inputs, configurable hostname/mDNS, hardware telemetry, BLE/UDP/serial IFTTT, PWM and OLED grids",
+  "description": "KinConductor KC868-A6 firmware with calibrated current inputs, hostname/mDNS, hardware telemetry, grouped WebGUI, BLE presence, per-rule UDP/serial IFTTT, PWM and OLED grids",
   "private": true,
   "directories": {
     "doc": "docs",

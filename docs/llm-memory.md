@@ -1,0 +1,76 @@
+# Project memory for future LLM work
+
+[Index](./README.md) · [Instructions](../AGENTS.md) ·
+[Completed work](../TODO_REFACTORED.md) · [Remaining specification](../REFACTOR_TODO.md)
+
+This is version-controlled engineering context, not an automatic runtime memory
+store. Update facts when verified; do not record passwords, tokens, private
+network names, serial output or unverified assumptions.
+
+## Stable decisions
+
+- Base and coprocessor are the only maintained profiles; explicit base for a
+  board without a coprocessor. The coprocessor build is a UART1 diagnostic
+  default, **not implemented P17/NCP/RCP/custom-bridge support**.
+- Official pioarduino platform and tested libraries are pinned in PlatformIO.
+  No npm dependencies; `npm test` uses native ASan/UBSan and Node's test runner.
+  Fresh checkout needs a firmware build to acquire ArduinoJson first.
+- GPIO/P17 roles are not extra hardware UART controllers. MCU UART1/2 routing
+  replaces another role. GPIO12 straps boot; GPIO13 conflicts with PN532 CS.
+  Manufacturer RS232 naming conflicts with the preserved runtime convention.
+- Supplied schematic shows all four conditioned analog inputs as 0–5 V.
+  Do not assume A3/A4 have current-loop shunts. DA terminals include LM258
+  conditioning, distinct from GPIO voltages. Verify actual revision/waveform.
+- Current scaling is two-point linear, disabled and uncalibrated by default;
+  not raw-waveform AC RMS, automatic calibration or overcurrent protection.
+- Default hostname is **kinconductor**, without `.local`; mDNS adds the suffix.
+- Routine firmware and LittleFS updates are separate operations, preserve NVS,
+  and require safe-load/port approval. Factory images contain NVS padding and
+  initial OTA metadata and are not NVS-preserving routine updates.
+
+## Implementation map and limits
+
+- Portable contracts/registry: `include/core`, `src/core`.
+  Composition/hardware scheduling still partly in `src/main.cpp`.
+- Current providers: ADC, board IO, sensor cache, fan PWM, BLE presence,
+  Wi-Fi/UDP/serial transport, calibrated current and rule-specific UDP receivers.
+  Registry limit is eight modules: adding a ninth requires an explicit
+  capacity/memory review, not an unchecked registration.
+- Main settings: `ConfigService`, complete record migration, schema API.
+  Separate NVS records: OLED layout, current calibration, hostname, BLE target,
+  IFTTT rules. IFTTT remains limited to four rules.
+- Rule UDP: distinct local ports, share one socket for duplicate ports,
+  optional sender IP/port and exact/contains text. Maximum four listeners,
+  256 UTF-8 bytes, bounded queued matches. Global UDP port must not collide.
+- BLE has one shared nonblocking scanner, bounded 24-device UI cache and one
+  selected target. A healthy scan with no devices differs from scan failure.
+- Dynamic IO/actions/Settings/OLED use descriptors. Settings groups are UI
+  presentation; the API remains a flat record. Do not duplicate configuration.
+- Firmware-only upload leaves stale WebGUI; asset-only upload leaves stale APIs.
+  API HTML must be reported as a mismatched endpoint, not a JSON parser crash.
+
+## Failure lessons and validation
+
+- ArduinoJson with a `const char *` can borrow storage. A MAC buffer created
+  inside a loop must be copied before its scope ends. Native tests must check
+  every address after the serializer returns, not just device count.
+- Native and ESP32 JSON slots have different sizes. Use `JSON_OBJECT_SIZE`
+  with an explicit copied-string budget and test the actual maximum modules.
+- Growing Arduino `String` while a large JSON pool is alive can truncate a
+  response under fragmentation. Reserve `measureJson` once and check the exact
+  serialized length. A locally successful build does not prove hardware heap.
+- In dashboard nested grids, `min-width: 0` and `minmax(0, 1fr)` prevent
+  content-derived overflow; choose DI column count for the actual inner panel.
+  Assert new controls belong to their intended form, not just that IDs exist.
+- Latest working-tree base/coprocessor binaries: 1,538,272 / 1,538,432 bytes
+  in a 1,572,864-byte OTA slot; static RAM 76,784 bytes. Short hardware tests
+  reached about 15 KiB minimum heap. These are not worst-case budgets;
+  added drivers require a new flash/heap/capabilities-response review.
+- Hostname HTML patterns use Unicode-sets `v` in modern browsers; escape hyphens.
+- Builds modify `.pio/libdeps`; native compilation reading those headers must
+  not run concurrently with dependency resolution.
+- [release workflow](../.github/workflows/release.yml) exists: branch/PR/manual
+  validation and tag-only releases. Local workflow checks do not establish an
+  actual successful GitHub run. Publication requires a permitted environment.
+- The last tagged release is v1.1.0; subsequent working-tree fixes are not that
+  immutable release. Do not move or overwrite the tag without an explicit ask.

@@ -57,7 +57,8 @@ Do not use erase-flash or factory flashing to preserve settings.
 
 - A pushed `v*` tag: both matrix builds and all tests must pass before the
   release job publishes two `.tar.gz` archives.
-- Manual **Actions → Build release firmware → Run workflow**: validates and
+- A branch push or pull request: both profiles build and tests run; no release.
+- Manual **Actions → Validate and release firmware → Run workflow**: validates and
   uploads build artifacts, but does not create a release.
 
 Tags must be `v<major>.<minor>.<patch>` and match package and firmware versions.

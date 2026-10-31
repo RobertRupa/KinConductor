@@ -69,7 +69,10 @@ changes from false to true. RF24 transmission is available only in the
 
 The newer **IO** page uses registered capabilities for module readings and
 typed action forms. **Settings** generates all current application fields from
-the firmware schema. **Screen** edits pages and binds cells to registered ADC,
+the firmware schema. Native accordions organize the 33 fields into buses/UDP,
+Bluetooth, sensors, outputs, inputs and OLED; network identity has its own
+section. Expand a section to edit it; the application settings still save as
+one flat record. **Screen** edits pages and binds cells to registered ADC,
 DI/relay and sensor properties; positions are zero-based.
 Select `displayMode:5` / “Interface grid” after saving to render those pages
 on SSD1306. The layout has 1–8 pages, up to 4 rows/columns per page and 16
@@ -127,6 +130,54 @@ Bluetooth settings support OFF, BLE scan of nearby advertisers and a
 Bluetooth discovery is not implemented in this firmware. BLE scanning and
 beacon advertising are exclusive modes; the board's Bluetooth uses the ESP32
 radio and does not need external GPIO wiring.
+
+The scan endpoint returns a bounded cache of up to 24 devices from the shared
+nonblocking scanner, not a fresh blocking discovery on each click. A healthy
+empty cache is not an error. Backend failures return HTTP 503 with an explicit
+error displayed by the UI. Temporary MAC buffers are copied into JSON rather
+than borrowed; all returned addresses remain valid after serialization.
+
+### Rule-specific UDP triggers
+
+Choose **IFTTT → UDP packet on rule port**, then configure:
+
+- Local receive port: 1–65535, bound on all local interfaces (`0.0.0.0`).
+- Optional sender IPv4 address; empty accepts any sender.
+- Sender port: 0 accepts any, otherwise 1–65535.
+- Text match: exact or contains; empty text accepts any supported payload.
+  Maximum 256 UTF-8 bytes; printable text plus TAB/CR/LF, not a binary protocol.
+
+This is separate from `udpListenPort` in Interfaces/Settings, which controls
+the shared transport counter/text listener. Rule listeners work when that
+shared listener is disabled. Port 5353 is reserved for mDNS, and an active
+rule port cannot equal the shared UDP port. Conflicting rule/settings saves
+return HTTP 409 without replacing the previous record.
+
+Example rule for `/api/ifttt` (the endpoint accepts an array of up to four):
+
+```json
+{
+  "enabled": true,
+  "source": "udpPacket",
+  "udp": {"port": 5000, "remoteIp": "", "remotePort": 0, "match": "exact", "text": "start"},
+  "action": "capability",
+  "command": {"id": "transport.main/udp/send", "parameters": {"host": "192.168.1.20", "port": 5001, "data": "accepted"}}
+}
+```
+
+Destination host, port and data belong to the **Interface action →
+transport.main/udp/send**, not the receive-port fields. Save the rules
+explicitly after adding/editing them. Rules sharing a local port share one
+socket; at most four distinct ports are opened. Each matching packet queues
+an action, even when consecutive packets contain the same text, unlike an
+edge comparison on a numeric counter. Read match counters in IO or bind
+`udp.rules/1/matches` through `/4/matches` to OLED/IFTTT.
+
+Processing is bounded to four datagrams per socket per tick and four pending
+matches per rule. Overflow/bind failures surface as module errors; there is
+no reliable-delivery or burst-throughput guarantee. Disconnect closes sockets,
+reconnect reopens them; configuration replacement resets counters and pending
+matches. Empty UDP datagrams are not observable with this SDK's WiFiUDP API.
 
 The Interfaces page can enable a beeper on DA-1 (DAC1/GPIO26), set its tone and
 test duration, then play a short test tone. This uses PWM and disables analog

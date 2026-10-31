@@ -25,7 +25,7 @@ public:
     using SettingsApplier = std::function<void(const DeviceSettings &)>;
     using BeeperTester = std::function<bool()>;
     using IftttUpdater = std::function<void(const String &)>;
-    using BluetoothScanner = std::function<String()>;
+    using BluetoothScanner = std::function<kc868a6::core::Result(String &)>;
     using RadioPacketSender = std::function<bool(uint32_t)>;
     using RadioPacketHistoryProvider = std::function<String()>;
 

@@ -29,5 +29,6 @@ trap 'rm -f "$binary"' EXIT
     test/test_ble_presence.cpp src/peripherals/ble_presence.cpp \
     test/test_transport.cpp src/peripherals/transport.cpp \
     test/test_measurements.cpp src/peripherals/current_inputs.cpp src/config/network_config.cpp \
+    test/test_udp_rules.cpp src/peripherals/udp_rules.cpp src/web/ble_scan.cpp \
     -o "$binary"
 "$binary"

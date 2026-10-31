@@ -123,3 +123,20 @@ test("hostname HTML pattern escapes the hyphen for browser Unicode sets", () => 
   assert.ok(regex.test("kinconductor") && regex.test("KC868-A6"));
   assert.ok(!regex.test("a.local") && !regex.test("-host") && !regex.test("host-"));
 });
+test("settings fields are categorized once, in stable functional order", () => {
+  const { api } = harness();
+  const fields = ["udpListenPort", "uart1Mode", "i2cClockHz", "blePresenceTimeoutSeconds",
+    "bluetoothMode", "gpio32SensorType", "sensorIntervalMs", "temperature1Enabled",
+    "fanPin", "beeperFrequencyHz", "s2InputEnabled", "displayMode"].map((id) => ({ id }));
+  const groups = api.groupedSettings(fields);
+  assert.equal(groups.map((group) => group.id).join(","), "interfaces,bluetooth,sensors,outputs,inputs,screen");
+  assert.equal(groups.flatMap((group) => group.fields).length, fields.length);
+  assert.equal(new Set(groups.flatMap((group) => group.fields.map((field) => field.id))).size, fields.length);
+});
+test("UDP trigger configuration belongs to the IFTTT form, not the header", () => {
+  const html = fs.readFileSync("data/index.html", "utf8");
+  const form = html.match(/<form[^>]*id="iftttBuilderForm"[\s\S]*?<\/form>/)[0];
+  assert.ok(form.includes('id="iftttUdpFields"'));
+  assert.ok(form.includes('id="iftttUdpPort"'));
+  assert.ok(!html.slice(0, html.indexOf("</header>")).includes('id="iftttUdpFields"'));
+});

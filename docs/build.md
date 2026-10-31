@@ -117,7 +117,7 @@ against explicitly synthetic APIs. Device testing remains separate.
 Deploy both firmware and the updated LittleFS assets to see matching APIs/UI.
 The earlier board-diagnostics slice added 24 B static RAM and about 4.3 KiB linked flash; complete
 firmware images occupy 92.94–93.17% of the unchanged OTA slot. See
-[the progress report](../REFACTOR_TODO.md#13-todo-dla-agentów-llm--kolejność-i-zależności)
+[the completed progress report](../TODO_REFACTORED.md)
 for historical per-profile measurements and the latest deployment record.
 
 ### Initial capability slice: historical build measurements
@@ -218,3 +218,36 @@ Each completed refactor slice ends with updating README, the implementation
 checklist and affected project metadata/manifests. Change dependencies,
 build flags, partition layout or release version only when the slice actually
 requires it; do not advertise planned drivers as implemented.
+
+## Settings, BLE and rule UDP deployment — 2026-10-31
+
+Approved base **kc868-a6 without coprocessor/RF24** and matching final LittleFS
+were flashed on `/dev/ttyUSB0`, both hashes verified; NVS was preserved.
+These are post-v1.1.0 working-tree fixes, not replacement images for that
+immutable tag.
+
+- Both firmware profiles and both matching filesystem images build successfully.
+  Base firmware **1,538,272 bytes**, coprocessor **1,538,432 bytes**;
+  unchanged 1,572,864-byte OTA slot leaves **34,592 / 34,432 bytes**.
+  Static RAM **76,784 bytes**; LittleFS **917,504 bytes**.
+- `npm test`: 35 core/config/board/capability/measurement/UDP native groups,
+  additional BLE/transport suites with ASan/UBSan, and 19 JavaScript tests pass.
+  Local actionlint 1.7.7 passes; no actual GitHub Actions run was performed.
+- Real APIs expose eight modules / 55 properties. BLE scans returned 9–13
+  devices with canonical MAC addresses; UI cards and selection buttons work
+  in DOM smoke checks. Physical range transitions remain unverified.
+- Dashboard at 390/860/1000/1200 px: DI cells inside their panel, relay rows
+  inside their width, no panel overlap or horizontal document overflow.
+  Settings: all 33 fields exactly once, six functional groups, 38 px controls,
+  20×20 px checkboxes; collapsing a group reduces its height and hides controls.
+- Real UDP tests: separate and shared ports, exact/contains matching, sender
+  IP/port filters, repeated packet actions and replies, mDNS/global-port HTTP
+  409 rejection without record replacement. The real IFTTT UI saved and
+  read back a rule-specific receive port and outgoing host/port/data correctly.
+  Original rules were restored after tests. This is not a burst-delivery guarantee.
+- Observed minimum heap reached approximately 15 KiB during the short test
+  session; this is not a worst-case or long-term concurrency budget.
+
+Browser pointer automation timed out; DOM interaction/layout tests are not
+an exhaustive pointer/accessibility audit. Current sensor calibration, fan
+waveforms and every optional peripheral remain hardware acceptance work.

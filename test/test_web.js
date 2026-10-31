@@ -132,3 +132,41 @@ test("board requests do not overlap", async () => {
   release({ ok: true, json: async () => fixture() });
   await retry;
 });
+
+test("BLE scan renders cached devices and surfaces backend failures instead of a false empty result", async () => {
+  const elements = new Map(["#bluetoothScanButton", "#bluetoothScanMessage", "#bluetoothDeviceList"].map((id) => [id, element()]));
+  elements.set("#interfaceSettingsForm", { elements: { bluetoothMode: { value: "1" } } });
+  let response = { devices: [{ name: "Test BLE", address: "AA:BB:CC:DD:EE:FF", rssi: -45 }] };
+  const context = vm.createContext({
+    $: (id) => elements.get(id), t: (key) => key, document: { createElement: () => ({ ...element(), addEventListener() {} }) },
+    window: { CapabilityUI: { request: async () => response } }
+  });
+  const start = source.indexOf("async function scanNearbyBluetooth()");
+  const end = source.indexOf("async function loadBleTarget()", start);
+  vm.runInContext("let nearbyBluetoothDevices=[];\n" + source.slice(start, end), context);
+  await context.scanNearbyBluetooth();
+  assert.equal(elements.get("#bluetoothDeviceList").children.length, 1);
+  assert.equal(elements.get("#bluetoothScanMessage").textContent, "1 BLE");
+  response = { error: "unavailable", field: "ble_scanner", devices: [] };
+  await context.scanNearbyBluetooth();
+  assert.match(elements.get("#bluetoothScanMessage").textContent, /ble_scanner/);
+  assert.equal(elements.get("#bluetoothDeviceList").children.length, 0);
+  assert.equal(elements.get("#bluetoothScanButton").disabled, false);
+});
+test("UDP rule form validates per-rule port, IPv4 and UTF-8 payload byte limits", () => {
+  const values = {
+    "#iftttUdpPort": "5000", "#iftttUdpRemotePort": "0", "#iftttUdpRemoteIp": "",
+    "#iftttUdpText": "hello", "#iftttUdpMatch": "contains"
+  };
+  const context = vm.createContext({ $: (id) => ({ value: values[id] }), deviceSettings: { udpListenPort: 6000 }, TextEncoder });
+  const start = source.indexOf("function udpRuleFromForm()");
+  const end = source.indexOf('$("#addIftttRule")', start);
+  vm.runInContext(source.slice(start, end), context);
+  assert.equal(context.udpRuleFromForm().port, 5000);
+  for (const [key, value] of [["#iftttUdpPort", "0"], ["#iftttUdpPort", "5353"], ["#iftttUdpPort", "6000"],
+    ["#iftttUdpRemoteIp", "256.1.1.1"], ["#iftttUdpRemotePort", "-1"], ["#iftttUdpText", "é".repeat(129)]]) {
+    const original = values[key]; values[key] = value;
+    assert.throws(() => context.udpRuleFromForm());
+    values[key] = original;
+  }
+});

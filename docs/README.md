@@ -16,6 +16,8 @@ No documentation build or external service is required.
 7. [Calibrated current sensors and loop receivers](./current-measurement.md)
 8. [Manufacturer resources and compatibility](./manufacturer-sources.md)
 9. [Tagged release images and CI](./releases.md)
+10. [LLM project memory and instructions](./llm-memory.md)
+11. [Completed refactoring work](../TODO_REFACTORED.md)
 
 The chapters describe current behavior; the implementation plan also describes
 future work. A build flag or resource reservation is not evidence that a

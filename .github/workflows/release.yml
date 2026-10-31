@@ -1,8 +1,11 @@
-name: Build release firmware
+name: Validate and release firmware
 on:
   push:
+    branches:
+      - "**"
     tags:
       - "v*"
+  pull_request:
   workflow_dispatch:
 
 permissions:

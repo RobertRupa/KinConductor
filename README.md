@@ -24,18 +24,26 @@ site generator or dependencies. Start with the [documentation index](./docs/READ
 | [Manufacturer resources](./docs/manufacturer-sources.md) | KinCony forum/KCS documentation, schematic evidence and revision warnings |
 | [Release images and CI](./docs/releases.md) | Tagged builds, image manifests, SHA256 and deployment precautions |
 | [Implementation specification](./REFACTOR_TODO.md) | Dependency-ordered 50-task plan and acceptance criteria |
+| [Completed work](./TODO_REFACTORED.md) | Verified implementation slices and historical measurements |
+| [LLM project context](./docs/llm-memory.md) | Project instructions, memory and peripheral workflow skill |
 
-The latest capability-driven WebGUI adds **IO**, **Screen** and **Settings**.
+The capability-driven WebGUI includes **IO**, **Screen** and **Settings**.
 Matching base firmware **without RF24** and LittleFS assets were uploaded on
 2026-10-31. See [the extension slice](./docs/refactoring.md#presence-transports-and-output-configuration)
 and [deployment checks](./docs/build.md#extension-deployment--2026-10-31).
 Version **1.1.0** adds hardware information in the header, persistent network
 identity in **Settings**, and current-sensor configuration in **Sensors**.
-Set the UDP listen port in **Interfaces** (0 disables RX); the listener binds
-to all local addresses (`0.0.0.0`). Outgoing destinations belong to IO/IFTTT actions.
+The latest working-tree fixes add responsive dashboard inputs, grouped
+Settings accordions, reliable BLE scan JSON and
+[rule-specific UDP triggers](./docs/peripherals.md#rule-specific-udp-triggers).
+Set the shared UDP listen port in **Interfaces** (0 disables that listener).
+For independent listeners, choose **IFTTT → UDP packet on rule port** and set
+the local port, sender filters and text match. Listeners bind to `0.0.0.0`;
+outgoing destination address/port/data belong to IO/IFTTT send actions.
 The default LAN name is `http://kinconductor.local/`.
 The [release workflow](./.github/workflows/release.yml) builds both profiles
-from `v*` tags. Local builds/packages are verified; publication and a GitHub
+on branch pushes, pull requests and manual runs; releases require `v*` tags.
+Local builds/packages are verified; publication and a GitHub
 Actions run have not been performed from this environment.
 
 ## Quick start

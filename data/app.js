@@ -2,6 +2,11 @@ const translations = {
   pl: {
     pageScreen: "Ekran", pageSettings: "Ustawienia", capabilityAction: "Akcja interfejsu",
     bleSelectId: "Wybierz ID", bleIdSaved: "ID zapisane · in_range",
+    udpPacketSource: "UDP · pakiet na porcie reguły", udpRulePort: "Lokalny port odbioru",
+    udpRemoteIp: "IP nadawcy (puste = dowolny)", udpRemotePort: "Port nadawcy (0 = dowolny)",
+    udpTextMatch: "Dopasowanie treści", udpExact: "Równa", udpContains: "Zawiera",
+    udpText: "Tekst pakietu (puste = dowolny)",
+    udpRuleHelp: "Port przypisany do reguły, bind 0.0.0.0. Ten sam port współdzieli odbiornik. Nie używaj globalnego portu UDP ani 5353 (mDNS). Maks. 256 bajtów UTF-8.",
     udpBindHelp: "Nasłuch: 0.0.0.0 (wszystkie lokalne adresy). Nadawca używa IP płytki i tego portu. Adres/port docelowy ustawiasz w akcji UDP Send w IO/IFTTT.",
     networkIdentity: "Sieć · hostname i mDNS", hostnameHelp: "Bez .local; litery, cyfry i myślnik. Zmiana ponownie łączy Wi-Fi. Domyślnie: kinconductor.local.",
     currentCalibration: "Pomiar prądu · kalibracja wejść A1–A4",
@@ -117,6 +122,11 @@ const translations = {
   en: {
     pageScreen: "Screen", pageSettings: "Settings", capabilityAction: "Interface action",
     bleSelectId: "Select ID", bleIdSaved: "ID saved · in_range",
+    udpPacketSource: "UDP · packet on rule port", udpRulePort: "Local receive port",
+    udpRemoteIp: "Sender IP (empty = any)", udpRemotePort: "Sender port (0 = any)",
+    udpTextMatch: "Payload match", udpExact: "Equals", udpContains: "Contains",
+    udpText: "Packet text (empty = any)",
+    udpRuleHelp: "Rule-specific port, bind 0.0.0.0. Identical ports share a receiver. Do not use the global UDP port or 5353 (mDNS). Max. 256 UTF-8 bytes.",
     udpBindHelp: "Listen: 0.0.0.0 (all local addresses). Send to the board IP and this port. Destination address/port is configured in the UDP Send action in IO/IFTTT.",
     networkIdentity: "Network · hostname and mDNS", hostnameHelp: "Without .local; letters, digits and hyphens. Changes reconnect Wi-Fi. Default: kinconductor.local.",
     currentCalibration: "Current measurement · A1–A4 calibration",
@@ -239,6 +249,7 @@ let lastI2cDetected = [];
 let iftttRules = [];
 let rf24History = [];
 let savedRf24Packets = [];
+let nearbyBluetoothDevices = [];
 let rf24Available = false;
 let lastRf24RefreshAt = 0;
 let lastBoardStatus = null;
@@ -836,6 +847,7 @@ function switchPage(page) {
 }
 
 function iftttSourceLabel(source) {
+  if (source === "udpPacket") return t("udpPacketSource");
   if (iftttSourceNames[source]) return t(iftttSourceNames[source]);
   if (source.startsWith("digital")) return `DI ${source.slice(7)}`;
   if (source.startsWith("analog")) return `AI ${source.slice(6)} · ADC`;
@@ -878,6 +890,10 @@ function renderIftttRules() {
       description.textContent = `${iftttSourceLabel(rule.source)} ${rule.comparison} ${rule.threshold} → Relay ${rule.relay} ${action}`;
     }
     const remove = document.createElement("button");
+    if (rule.source === "udpPacket") {
+      const arrow = description.textContent.indexOf(" → ");
+      description.textContent = `UDP :${rule.udp?.port} · ${rule.udp?.remoteIp || "*"}:${rule.udp?.remotePort || "*"} · ${rule.udp?.match} ${JSON.stringify(rule.udp?.text || "*")}${description.textContent.slice(arrow)}`;
+    }
     remove.type = "button";
     remove.className = "remove-rule";
     remove.textContent = "×";
@@ -927,7 +943,8 @@ async function saveIftttRules() {
       return;
     }
     if (response.status === 409) {
-      $("#iftttMessage").textContent = t("beeperDisabledError");
+      const error = await response.json();
+      $("#iftttMessage").textContent = `${error.error}${error.field ? ` (${error.field})` : ""}`;
       return;
     }
     if (!response.ok) {
@@ -981,10 +998,10 @@ async function scanNearbyBluetooth() {
   button.disabled = true;
   message.textContent = t("scanWait");
   try {
-    const response = await fetch("/api/bluetooth/scan", { cache: "no-store" });
-    if (!response.ok) throw new Error("ble");
-    const result = await response.json();
-    nearbyBluetoothDevices = result.devices || [];
+    const result = await window.CapabilityUI.request("/api/bluetooth/scan");
+    if (result.error) throw new Error(`${result.error}${result.field ? ` (${result.field})` : ""}`);
+    if (!Array.isArray(result.devices)) throw new Error("Invalid BLE response");
+    nearbyBluetoothDevices = result.devices;
     const list = $("#bluetoothDeviceList");
     list.replaceChildren();
     if (!nearbyBluetoothDevices.length) {
@@ -1017,8 +1034,9 @@ async function scanNearbyBluetooth() {
     }
 
     message.textContent = `${nearbyBluetoothDevices.length} BLE`;
-  } catch {
-    message.textContent = t("bluetoothScanError");
+  } catch (error) {
+    $("#bluetoothDeviceList").replaceChildren();
+    message.textContent = `${t("bluetoothScanError")} ${error.message}`;
   } finally {
     button.disabled = false;
   }
@@ -1074,9 +1092,35 @@ function updateIftttActionFields() {
   $("#beeperActionFields").hidden = !beeperAction;
 }
 $("#iftttAction").addEventListener("change", updateIftttActionFields);
+function updateIftttSourceFields() {
+  const udp = $("#iftttSource").value === "udpPacket";
+  $("#iftttUdpFields").hidden = !udp;
+  $("#iftttNumericCondition").hidden = udp;
+}
+$("#iftttSource").addEventListener("change", updateIftttSourceFields);
+function udpRuleFromForm() {
+  const port = Number($("#iftttUdpPort").value);
+  const remotePort = Number($("#iftttUdpRemotePort").value);
+  const remoteIp = $("#iftttUdpRemoteIp").value.trim();
+  const text = $("#iftttUdpText").value;
+  if ($("#iftttUdpPort").value === "" || !Number.isInteger(port) || port < 1 || port > 65535 ||
+      port === 5353 || port === Number(deviceSettings.udpListenPort) ||
+      $("#iftttUdpRemotePort").value === "" || !Number.isInteger(remotePort) || remotePort < 0 ||
+      remotePort > 65535 || (remoteIp && (!/^\d{1,3}(\.\d{1,3}){3}$/.test(remoteIp) ||
+        remoteIp.split(".").some((part) => Number(part) > 255))) ||
+      new TextEncoder().encode(text).length > 256 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text)) {
+    throw new Error("Invalid UDP trigger port/address/payload");
+  }
+  return { port, remotePort, remoteIp, match: $("#iftttUdpMatch").value, text };
+}
 $("#addIftttRule").addEventListener("click", () => {
   if (iftttRules.length >= 4) return;
   const action = $("#iftttAction").value;
+  let udp;
+  if ($("#iftttSource").value === "udpPacket") {
+    try { udp = udpRuleFromForm(); }
+    catch (error) { $("#iftttMessage").textContent = error.message; return; }
+  }
   let command;
   if (action === "capability") {
     try {
@@ -1096,8 +1140,9 @@ $("#addIftttRule").addEventListener("click", () => {
   iftttRules.push({
     enabled: true,
     source: $("#iftttSource").value,
+    ...(udp ? { udp } : {}),
     comparison: $("#iftttComparison").value,
-    threshold: Number($("#iftttThreshold").value),
+    threshold: udp ? 0 : Number($("#iftttThreshold").value),
     action,
     ...(command ? { command } : {}),
     relay: action === "relay" ? Number($("#iftttRelay").value) : 0,

@@ -370,6 +370,7 @@ void runCapabilitiesTests();
 void runBlePresenceTests();
 void runTransportTests();
 void runMeasurementTests();
+void runUdpRuleTests();
 
 int main() {
     testValueTypes();
@@ -388,4 +389,5 @@ int main() {
     runBlePresenceTests();
     runTransportTests();
     runMeasurementTests();
+    runUdpRuleTests();
 }
