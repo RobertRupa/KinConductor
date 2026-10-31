@@ -13,10 +13,13 @@ The full expansion plan is **not complete**.
 The documentation is a repository-local Markdown wiki, without an additional
 site generator or dependencies. English is the default language for repository
 documentation. Start with the [documentation index](./docs/README.md).
+The separate [native GitHub Wiki](https://github.com/RobertRupa/KinConductor/wiki)
+is published from these chapters with the [Wiki synchronization guide](./docs/wiki-sync.md).
 
 | Chapter | Contents |
 | --- | --- |
 | [Getting started](./docs/setup.md) | Requirements, Ubuntu/VS Code installation, first build and serial upload |
+| [Publish native GitHub Wiki](./docs/wiki-sync.md) | Generate Home, sidebar and chapters; push to the separate Wiki Git repository |
 | [Build and upload](./docs/build.md) | PlatformIO profiles, tests, firmware and LittleFS deployment |
 | [Build profiles](./docs/profiles.md) | Supported A6 environments, experimental flags and Ax alias limitations |
 | [Settings and parameters](./docs/settings-reference.md) | All 33 firmware settings, defaults/ranges and separate persistent records |
