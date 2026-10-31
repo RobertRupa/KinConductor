@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { parsePartitions, packageRelease } = require("../scripts/package-release");
+const { parsePartitions, packageRelease, RELEASE_PROFILES } = require("../scripts/package-release");
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "kinconductor-release-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -53,10 +53,33 @@ test("release rejects version/profile mismatches and overlapping partitions", (t
   assert.throws(() => packageRelease({ ...options, profile: "../../other" }), /profile/);
   assert.throws(() => parsePartitions("a,data,nvs,0x9000,0x5000\nb,data,ota,0xa000,0x2000"), /Overlapping/);
 });
-test("tag release workflow builds both profiles and only treats a missing release as createable", async () => {
+test("release packages every configured PlatformIO profile", (t) => {
+  const { options, build } = fixture(t);
+  const { root } = options;
+  const existingBuilds = new Set(["kc868-a6"]);
+  for (const profile of RELEASE_PROFILES) {
+    if (!existingBuilds.has(profile)) {
+      fs.cpSync(build, path.join(root, ".pio", "build", profile), { recursive: true });
+    }
+    const result = packageRelease({ ...options, profile });
+    assert.equal(result.manifest.profile, profile);
+    assert.ok(fs.existsSync(path.join(result.output, "firmware.factory.bin")));
+    const readme = fs.readFileSync(path.join(result.output, "README.txt"), "utf8");
+    assert.match(readme, /not electrically validated/);
+  }
+});
+test("tag-only workflow builds and publishes every profile", async () => {
   const yaml = fs.readFileSync(".github/workflows/release.yml", "utf8");
-  assert.match(yaml, /tags:\s+- "v\*"/);
-  assert.match(yaml, /profile: \[kc868-a6, kc868-a6-coprocessor\]/);
+  const triggerBlock = yaml.match(/^on:\n([\s\S]*?)^permissions:/m)?.[1];
+  assert.ok(triggerBlock);
+  assert.match(triggerBlock, /push:\s+tags:\s+- "v\*"/);
+  assert.doesNotMatch(triggerBlock, /branches:|pull_request:|workflow_dispatch:/);
+  const configuredProfiles = [...fs.readFileSync("platformio.ini", "utf8").matchAll(/^\[env:([^\]]+)\]/gm)]
+    .map((match) => match[1]);
+  const matrixProfiles = yaml.match(/^        profile: \[(.*)\]$/m)[1].split(", ");
+  assert.deepEqual(matrixProfiles, configuredProfiles);
+  assert.deepEqual(RELEASE_PROFILES, configuredProfiles);
+  assert.match(yaml, /name: Build \$\{\{ matrix\.profile \}\}/);
   assert.match(yaml, /needs: build/);
   assert.match(yaml, /Tag does not match package version/);
   assert.match(yaml, /gh release upload "\$TAG" release-assets\/\*\.tar\.gz --clobber/);

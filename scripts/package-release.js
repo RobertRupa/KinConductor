@@ -3,6 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
+const RELEASE_PROFILES = [
+  "kc868-a6-base", "kc868-a6", "kc868-a4", "kc868-a8", "kc868-a8s",
+  "kc868-a16", "kc868-a32", "kc868-a64", "kc868-a128", "kc868-a6-coprocessor"
+];
 
 function parsePartitions(csv) {
   const partitions = csv.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#")).map((line) => {
@@ -23,7 +27,7 @@ function parsePartitions(csv) {
 }
 
 function packageRelease({ root, profile, version, commit, outputRoot }) {
-  if (!["kc868-a6", "kc868-a6-coprocessor"].includes(profile)) throw new Error("Unsupported release profile");
+  if (!RELEASE_PROFILES.includes(profile)) throw new Error("Unsupported release profile");
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("Version must be major.minor.patch");
   if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error("Commit must be a full SHA-1");
   const metadata = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
@@ -81,7 +85,10 @@ function packageRelease({ root, profile, version, commit, outputRoot }) {
   fs.writeFileSync(path.join(output, "README.txt"), [
     `KinConductor v${version} / ${profile} / ${commit}`,
     "Both matching firmware and LittleFS are required. Verify SHA256SUMS before flashing.",
-    "Select the base kc868-a6 for a board without a coprocessor. Both profiles omit RF24.",
+    "All profiles omit RF24. Select a profile matching the intended firmware configuration.",
+    "kc868-a6-base is a generic shared build configuration, not a board-specific validation profile.",
+    "KC868-Ax aliases other than A6 reuse the A6 baseline pin map and are not electrically validated for those boards.",
+    "The coprocessor profile configures a diagnostic UART; Zigbee/Thread stacks and the P17 protocol are not implemented.",
     "Disconnect unsafe loads and confirm the board/serial port before a reset.",
     "Routine update: use PlatformIO upload then uploadfs, preserving NVS and partition layout.",
     "firmware.bin is the OTA application; its serial offset targets app0, NOT the automatically selected inactive OTA slot.",
@@ -102,4 +109,4 @@ if (require.main === module) {
   const result = packageRelease({ root, profile, version, commit, outputRoot: path.join(root, "dist", "releases", `v${version}`) });
   console.log(`${result.output}: ${result.manifest.firmwareBytes} application bytes, ${result.manifest.otaRemainingBytes} OTA bytes remaining`);
 }
-module.exports = { parsePartitions, packageRelease };
+module.exports = { parsePartitions, packageRelease, RELEASE_PROFILES };

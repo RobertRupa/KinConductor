@@ -4,11 +4,10 @@
 
 ## Build inputs and local validation
 
-Current working version/tag: **1.1.3 / v1.1.3**, adding selected board-model
-identity, profile-aware diagnostics and generated favicons, plus the latest
-English wiki/screenshots. Local firmware, filesystem and tests must pass before
-publishing this tag; a remote build/release is verified only after the GitHub
-Actions workflow succeeds.
+Release version/tag: **1.1.4 / v1.1.4**, updating CI to run only on pushed
+version tags and to build/package every configured PlatformIO profile in an
+independent job. The A4/A8/A8S/A16/A32/A64/A128 aliases remain A6-baseline
+builds, not electrically validated profiles for those boards.
 
 Version 1.1.0 pins PlatformIO Core 6.2.0 in CI, the official pioarduino
 `55.03.312-1` platform release (Arduino ESP32 3.3.12 / IDF 5.5.5),
@@ -17,11 +16,12 @@ It no longer depends on a machine-local custom platform definition.
 Node 18+ runs the dependency-free tests/packager; CI uses Node 22/Python 3.12.
 
 ```sh
-pio run -e kc868-a6 -e kc868-a6-coprocessor
+npm run build:all
 npm test
-pio run -e kc868-a6 -e kc868-a6-coprocessor -t buildfs
-npm run package:release -- kc868-a6 v1.1.3
-npm run package:release -- kc868-a6-coprocessor v1.1.3
+npm run build:fs:all
+for profile in kc868-a6-base kc868-a6 kc868-a4 kc868-a8 kc868-a8s kc868-a16 kc868-a32 kc868-a64 kc868-a128 kc868-a6-coprocessor; do
+  npm run package:release -- "$profile" v1.1.4
+done
 ```
 
 Run builds sequentially with tests: dependency-resolution changes may replace
@@ -29,7 +29,7 @@ Run builds sequentially with tests: dependency-resolution changes may replace
 only with the coprocessor profile, use
 `PIO_ENV=kc868-a6-coprocessor npm test`.
 
-Outputs are under ignored `dist/releases/v1.1.3/<profile>/`:
+Outputs are under ignored `dist/releases/v1.1.4/<profile>/`:
 
 | Image | Purpose / serial offset |
 | --- | --- |
@@ -61,18 +61,24 @@ Do not use erase-flash or factory flashing to preserve settings.
 
 [release.yml](../.github/workflows/release.yml) runs on:
 
-- A pushed `v*` tag: both matrix builds and all tests must pass before the
-  release job publishes two `.tar.gz` archives.
-- A branch push or pull request: both profiles build and tests run; no release.
-- Manual **Actions → Validate and release firmware → Run workflow** on a branch:
-  validates and uploads build artifacts, but does not create a release.
-  A manual dispatch explicitly using a matching tag ref can rerun publication.
+- A pushed `v*` tag only. Branch pushes, pull requests and manual dispatches do
+  not run this workflow. The tag must match the package and firmware version.
+- Ten independent matrix jobs build the ten configured PlatformIO environments:
+  `kc868-a6-base`, `kc868-a6`, `kc868-a4`, `kc868-a8`, `kc868-a8s`,
+  `kc868-a16`, `kc868-a32`, `kc868-a64`, `kc868-a128` and
+  `kc868-a6-coprocessor`. Each job builds firmware and matching LittleFS,
+  runs tests and packages a profile-specific archive.
+- After all ten jobs succeed, the tagged GitHub release contains all ten
+  `.tar.gz` profile archives.
+  The A4/A8/A8S/A16/A32/A64/A128 aliases reuse the A6 baseline pin map and are
+  not electrically validated for those boards; `kc868-a6-base` is a generic
+  shared build configuration. Read each packaged README before flashing.
 
 Tags must be `v<major>.<minor>.<patch>` and match package and firmware versions.
 The build job has read-only contents permission; only the successful tagged
 release job receives `contents: write`. The workflow fetches tags, rejects
 package/tag mismatches before the expensive build, and publishes only after
-both profile builds/tests/filesystems/packages succeed. Releases are first
+all ten profile builds/tests/filesystems/packages succeed. Releases are first
 created as drafts, assets uploaded, then published. Repeated runs reuse the
 release and replace matching archives (`--clobber`); permission/network failures
 are not mistaken for a missing release. Concurrent runs of the same ref are
@@ -82,7 +88,7 @@ For a future authorized publication from your own environment:
 
 ```sh
 git remote add origin https://github.com/RobertRupa/KinConductor.git
-git push --atomic origin HEAD v1.1.3
+git push --atomic origin HEAD v1.1.4
 ```
 
 Create the repository and verify its licensing/contents before those commands;
@@ -91,7 +97,6 @@ Inspect both build jobs and the release job in Actions, then download the
 archives and verify `sha256sum -c SHA256SUMS` inside each extracted profile.
 The tag-triggered run, not a local compile, is the GitHub build acceptance test.
 
-**Current publication status:** the workflow, local images and packaging have
-been validated locally. This session cannot transmit repository code to an
-external service; no repository push, published GitHub release or actual
-GitHub Actions run is claimed.
+**Publication status:** local builds, tests and packaging must pass before the
+tag is pushed. The GitHub Actions run on `v1.1.4` is the release acceptance
+check; a release is published only after all ten profile jobs succeed.

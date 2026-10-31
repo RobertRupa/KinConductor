@@ -59,12 +59,13 @@ favicon, warns when a non-A6 alias still uses the A6 baseline pin map, and
 reports remaining OTA application capacity plus per-core CPU load where
 supported. These aliases are build baselines, not validated electrical
 profiles for the other boards.
-The [release workflow](./.github/workflows/release.yml) builds both profiles
-on branch pushes, pull requests and manual runs. Pushing a matching `v*` tag
-builds firmware and LittleFS, runs tests and publishes both profile archives
-to GitHub Releases. Version/tag mismatches fail; publication can be retried.
-Local builds/packages are verified; publication and a GitHub
-Actions run have not been performed from this environment.
+The [release workflow](./.github/workflows/release.yml) builds every configured
+PlatformIO environment in a separate job. It runs only when a `v*` tag is
+pushed; branch pushes, pull requests and manual runs do not trigger it. A
+matching tag builds firmware and LittleFS, runs tests, and publishes all ten
+profile archives to GitHub Releases after every job passes. The A4/A8/A8S/A16/
+A32/A64/A128 aliases reuse the A6 baseline pin map and are not electrically
+validated for those boards. Version **1.1.4** updates this release workflow.
 
 ## Quick start
 
