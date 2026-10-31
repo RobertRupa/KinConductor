@@ -74,7 +74,14 @@ network names, serial output or unverified assumptions.
 - Builds modify `.pio/libdeps`; native compilation reading those headers must
   not run concurrently with dependency resolution.
 - [release workflow](../.github/workflows/release.yml) exists: branch/PR/manual
-  validation and tag-only releases. Local workflow checks do not establish an
+  validation and tag-only releases. Tags must match package/firmware versions;
+  successful matrix builds precede draft/assets/publication, reruns reuse the
+  release and clobber its matching assets. Local workflow checks do not establish an
   actual successful GitHub run. Publication requires a permitted environment.
 - Release v1.1.1 follows the immutable v1.1.0 tag. Do not move or overwrite
   existing release tags without an explicit ask.
+- v1.1.2 changes only WebGUI/release behavior: RF24 sections fail closed until
+  explicit build support, incomplete numeric presets replaced by backend ranges,
+  mode settings use named choices, transport data textarea uses LF, grid bounds
+  refresh after resize. Both maintained builds still omit RF24. Firmware size
+  is unchanged from v1.1.1; this version also has no physical deployment.

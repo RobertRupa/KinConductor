@@ -267,3 +267,25 @@ It had no firmware APIs and did not interact with hardware. This does not
 prove physical BLE range transitions, NVS power-loss behavior or a successful
 GitHub Actions run. Firmware was **not uploaded** as part of this release;
 update both firmware and LittleFS when deploying.
+
+## WebGUI and tag-release validation — v1.1.2
+
+Both firmware profiles and matching filesystem images build successfully;
+native ASan/UBSan suites and **26 JavaScript tests** pass. Local actionlint
+1.7.7 validates the tag-release workflow. Release-script tests cover draft
+creation/reuse and propagation of permission/server errors.
+
+Synthetic API/browser checks covered all eight tabs at 390/860/1200 px:
+no off-screen controls or horizontal document overflow, numeric/text controls
+at least 38 px, and no visible RF24 monitor/diagnostics in the disabled profile.
+No-op interface saves preserved values 37 s / 2,750 Hz / 750 ms that were
+missing from old presets. Blank IFTTT threshold rejected, multiline LF data
+preserved, grid resizing refreshed coordinate bounds and empty positions were
+restored with an error message. These are DOM/synthetic checks, not physical
+firmware or comprehensive pointer/accessibility tests.
+
+Base **1,543,376 bytes**, coprocessor **1,543,552 bytes**, static RAM
+**78,448 bytes**, LittleFS **917,504 bytes**; unchanged OTA headroom
+**29,488 / 29,312 bytes**. No new dependencies or partitions.
+This version was not uploaded; no remote push or actual GitHub Actions run
+was performed in this environment.

@@ -113,6 +113,9 @@ Generic send action examples:
 UART1 send/receive is blocked while its mode is GPS or coprocessor. UART2
 uses RS485, not raw 3.3 V UART pins. Text is bounded to 256 UTF-8 bytes;
 serial uses newline or 25 ms idle framing. No remote acknowledgement is implied.
+IO and IFTTT action data uses a multiline textarea with a 256-byte UTF-8
+limit; browser textareas normalize line breaks to LF. This is not a binary
+payload editor or a configurable CRLF encoder.
 
 PWM is disabled by default on **DA-2 / GPIO25**. Enable/configure it only for
 a suitable circuit or oscilloscope. The GPIO produces **3.3 V logic PWM**,
@@ -232,3 +235,20 @@ The firmware starter initializes both UARTs, I2C, ADC, DAC, sensor GPIOs and
 SPI, sets relay outputs OFF, and reports digital/analog inputs once per second.
 No Ethernet controller appears in the supplied KC868-A6 schematic; network
 connectivity here is the ESP32's built-in Wi-Fi/Bluetooth.
+
+### WebGUI controls and build visibility — v1.1.2
+
+RF24 panels, last-packet diagnostics and new radio rule options start hidden.
+Only an explicit positive firmware capability enables them; a false/missing
+flag, malformed response or failed request cannot show a stale RF24 monitor.
+Stored radio rules remain readable, but cannot transmit in maintained builds.
+
+Sampling accepts 500–60,000 ms, OLED page interval 2–60 seconds, beeper
+frequency 250–5,000 Hz and test duration 50–3,000 ms. These are numeric inputs,
+not incomplete preset lists that lose valid saved values. UDP/PWM/BLE numeric
+fields are required; an empty input cannot silently become zero.
+Settings schema mode/type/pin fields reuse named choices from the corresponding
+specialist form, including DHT11. Grid coordinates are zero-based and constrained
+by the current dimensions; empty coordinates are rejected and resizing updates
+their bounds. Text/number controls have consistent minimum sizing, while native
+checkboxes and the OLED brightness slider retain their dedicated presentation.

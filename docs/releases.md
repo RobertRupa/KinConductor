@@ -4,8 +4,8 @@
 
 ## Build inputs and local validation
 
-Current version/tag: **1.1.1 / v1.1.1**, with eight independent saved BLE
-presence targets and the previous Settings/BLE/UDP fixes. Local firmware,
+Current version/tag: **1.1.2 / v1.1.2**, with RF24 build-aware visibility,
+corrected WebGUI controls and tag-release retry support. Local firmware,
 filesystem and tests are verified; hardware upload and remote publication
 were not performed for this tag.
 
@@ -19,8 +19,8 @@ Node 18+ runs the dependency-free tests/packager; CI uses Node 22/Python 3.12.
 pio run -e kc868-a6 -e kc868-a6-coprocessor
 npm test
 pio run -e kc868-a6 -e kc868-a6-coprocessor -t buildfs
-npm run package:release -- kc868-a6 v1.1.1
-npm run package:release -- kc868-a6-coprocessor v1.1.1
+npm run package:release -- kc868-a6 v1.1.2
+npm run package:release -- kc868-a6-coprocessor v1.1.2
 ```
 
 Run builds sequentially with tests: dependency-resolution changes may replace
@@ -28,7 +28,7 @@ Run builds sequentially with tests: dependency-resolution changes may replace
 only with the coprocessor profile, use
 `PIO_ENV=kc868-a6-coprocessor npm test`.
 
-Outputs are under ignored `dist/releases/v1.1.1/<profile>/`:
+Outputs are under ignored `dist/releases/v1.1.2/<profile>/`:
 
 | Image | Purpose / serial offset |
 | --- | --- |
@@ -63,19 +63,25 @@ Do not use erase-flash or factory flashing to preserve settings.
 - A pushed `v*` tag: both matrix builds and all tests must pass before the
   release job publishes two `.tar.gz` archives.
 - A branch push or pull request: both profiles build and tests run; no release.
-- Manual **Actions → Validate and release firmware → Run workflow**: validates and
-  uploads build artifacts, but does not create a release.
+- Manual **Actions → Validate and release firmware → Run workflow** on a branch:
+  validates and uploads build artifacts, but does not create a release.
+  A manual dispatch explicitly using a matching tag ref can rerun publication.
 
 Tags must be `v<major>.<minor>.<patch>` and match package and firmware versions.
 The build job has read-only contents permission; only the successful tagged
-release job receives `contents: write`.
+release job receives `contents: write`. The workflow fetches tags, rejects
+package/tag mismatches before the expensive build, and publishes only after
+both profile builds/tests/filesystems/packages succeed. Releases are first
+created as drafts, assets uploaded, then published. Repeated runs reuse the
+release and replace matching archives (`--clobber`); permission/network failures
+are not mistaken for a missing release. Concurrent runs of the same ref are
+serialized without cancelling an in-progress release.
 
 For a future authorized publication from your own environment:
 
 ```sh
 git remote add origin https://github.com/RobertRupa/KinConductor.git
-git push -u origin HEAD
-git push origin v1.1.0
+git push --atomic origin HEAD v1.1.2
 ```
 
 Create the repository and verify its licensing/contents before those commands;

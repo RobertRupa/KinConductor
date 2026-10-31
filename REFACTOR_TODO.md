@@ -1018,6 +1018,11 @@ legacy, walidacja/zapis NVS, UI listy i dynamiczne wyzwalacze.
 Testy software/local builds PASS; nie wgrano tej wersji i nie wykonano
 fizycznego testu obecności ośmiu nadajników.
 
+Przyrost v1.1.2: RF24 UI ukryte do jawnego potwierdzenia compiled support,
+kontrolki z pełnymi zakresami/nazwanymi trybami, multiline UDP/serial,
+grid bounds/empty-input validation, workflow tag build/release retry.
+Lokalne testy i synthetic browser PASS; zdalny push/Actions nadal niewykonane.
+
 - [ ] Publikacja repozytorium i wykonanie GitHub Actions: **zablokowane w tej
   sesji przez brak możliwości przesłania kodu do zewnętrznej usługi**.
   Lokalny workflow/actionlint to nie dowód udanego builda na GitHub.

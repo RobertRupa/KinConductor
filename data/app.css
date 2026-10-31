@@ -27,7 +27,7 @@ body {
   background-image: radial-gradient(#dce4dc 0.65px, transparent 0.65px);
   background-size: 18px 18px;
 }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button, select { cursor: pointer; }
 .hardware-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 12px; font-size: 10px; min-width: 0; }
 .hardware-summary div { min-width: 0; }
@@ -88,6 +88,8 @@ button, select { cursor: pointer; }
 .field-label { display: block; margin: 13px 0 6px; color: #506057; font-size: 11px; font-weight: 700; }
 .settings-panel select { width: 100%; height: 39px; padding: 0 10px; color: var(--ink); background: #fbfcfa; border: 1px solid #dce4dc; border-radius: 4px; }
 .settings-panel select:focus { outline: 2px solid #8eae63; outline-offset: 1px; }
+.settings-panel > input:not([type="range"]) { width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; color: var(--ink); background: #fbfcfa; border: 1px solid var(--line); border-radius: 4px; }
+.settings-panel > input:focus-visible { outline: 2px solid #8eae63; outline-offset: 1px; }
 .range-input { width: 100%; height: 24px; accent-color: var(--forest-2); }
 .setting-list { margin-top: 13px; border-top: 1px solid var(--line); }
 .setting-row { min-height: 54px; position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
@@ -143,25 +145,31 @@ button, select { cursor: pointer; }
 .board-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .board-table th, .board-table td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; }
 .board-table th { color: var(--muted); }
-.capability-modules, .schema-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.capability-modules, .schema-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 16px; }
+.capability-modules > *, .schema-fields > * { min-width: 0; }
 .capability-properties { display: grid; gap: 6px; margin-bottom: 16px; }
 .capability-property { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; overflow-wrap: anywhere; }
 .capability-action { margin: 12px 0; padding-top: 12px; border-top: 1px solid var(--line); }
 .capability-action input, .capability-action select, .schema-fields input, .schema-fields select { margin-bottom: 8px; }
 .capability-action > div, #iftttCapabilityParameters { display: grid; gap: 12px; }
 .capability-parameter { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
-.capability-parameter input:not([type="checkbox"]) { box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid #dce4dc; border-radius: 4px; background: #fbfcfa; color: var(--ink); }
+.capability-parameter input:not([type="checkbox"]), .capability-parameter textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid #dce4dc; border-radius: 4px; background: #fbfcfa; color: var(--ink); }
+.capability-parameter textarea { resize: vertical; }
 .capability-parameter.is-boolean { flex-direction: row; align-items: center; justify-content: space-between; }
 .capability-parameter input[type="checkbox"], .schema-fields input[type="checkbox"] { width: 20px; height: 20px; min-height: 0; margin: 0; flex: none; accent-color: #4b7553; }
 .screen-widget label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 11px; }
-.screen-widget input, .screen-widget select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; }
+.screen-widget input, .screen-widget select, .screen-page > label input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; background: #fbfcfa; color: var(--ink); }
+.screen-page > label { display: inline-flex; flex-direction: column; gap: 4px; margin-right: 8px; font-size: 11px; }
+.screen-page > label input { width: 100px; }
 .screen-page { margin: 16px 0; border-top: 1px solid var(--line); padding-top: 12px; }
 .screen-preview { display: grid; gap: 1px; aspect-ratio: 2; max-width: 512px; background: #111; padding: 1px; margin: 12px 0; }
 .screen-cell { min-width: 0; overflow: hidden; background: #25322b; color: white; padding: 6px; font-size: 12px; }
 .screen-widget { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
-.screen-widget input { width: 100px; }
+.screen-widget label { flex: 1 1 100px; }
+.screen-widget > select { flex: 1 1 220px; max-width: 100%; }
 .field-hint { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
-.device-card { min-height: 75px; display: grid; grid-template-columns: 9px 1fr auto; align-items: start; gap: 9px; padding: 12px; background: #f7f9f6; border: 1px solid #ebefea; border-radius: 4px; }
+.device-card { min-width: 0; min-height: 75px; display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: start; gap: 9px; padding: 12px; background: #f7f9f6; border: 1px solid #ebefea; border-radius: 4px; }
+.device-card > div { min-width: 0; overflow-wrap: anywhere; }
 .device-dot { width: 7px; height: 7px; margin-top: 4px; background: #c6cec7; border-radius: 50%; }
 .device-card.is-connected .device-dot { background: #4b9b74; box-shadow: 0 0 0 3px #4b9b741c; }
 .device-card strong, .device-card small { display: block; }
@@ -173,7 +181,6 @@ button, select { cursor: pointer; }
 #iftttBuilderForm input, #iftttBuilderForm select { width: 100%; height: 39px; padding: 0 10px; color: var(--ink); background: #fbfcfa; border: 1px solid #dce4dc; border-radius: 4px; }
 #iftttBuilderForm input:focus, #iftttBuilderForm select:focus { outline: 2px solid #8eae63; outline-offset: 1px; }
 #iftttBuilderForm .capability-parameter input[type="checkbox"] { width: 20px; height: 20px; padding: 0; }
-#interfaceSettingsForm > input { box-sizing: border-box; width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid #dce4dc; border-radius: 4px; color: var(--ink); background: #fbfcfa; }
 .nearby-list .device-card > button { grid-column: 2 / -1; }
 #bleSavedTargets .device-card { grid-template-columns: minmax(0, 1fr) auto; }
 #bleSavedTargets .device-card > div { min-width: 0; overflow-wrap: anywhere; }

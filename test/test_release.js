@@ -53,3 +53,41 @@ test("release rejects version/profile mismatches and overlapping partitions", (t
   assert.throws(() => packageRelease({ ...options, profile: "../../other" }), /profile/);
   assert.throws(() => parsePartitions("a,data,nvs,0x9000,0x5000\nb,data,ota,0xa000,0x2000"), /Overlapping/);
 });
+test("tag release workflow builds both profiles and only treats a missing release as createable", async () => {
+  const yaml = fs.readFileSync(".github/workflows/release.yml", "utf8");
+  assert.match(yaml, /tags:\s+- "v\*"/);
+  assert.match(yaml, /profile: \[kc868-a6, kc868-a6-coprocessor\]/);
+  assert.match(yaml, /needs: build/);
+  assert.match(yaml, /Tag does not match package version/);
+  assert.match(yaml, /gh release upload "\$TAG" release-assets\/\*\.tar\.gz --clobber/);
+  assert.match(yaml, /gh release edit "\$TAG" --draft=false/);
+  const block = yaml.match(/          script: \|\n([\s\S]*?)      - name: Publish/)[1];
+  const script = block.split("\n").map(line => line.replace(/^            /, "")).join("\n");
+  const execute = new (Object.getPrototypeOf(async function () {}).constructor)(
+    "github", "context", "core", "process", script
+  );
+  let created = 0;
+  let outcome = 404;
+  const github = { rest: { repos: {
+    getReleaseByTag: async () => {
+      if (outcome) throw Object.assign(new Error("GitHub request failed"), { status: outcome });
+      return { data: { id: 42 } };
+    },
+    createRelease: async options => {
+      assert.equal(options.tag_name, "v1.1.2");
+      assert.equal(options.draft, true);
+      ++created;
+    }
+  } } };
+  const context = { repo: { owner: "test", repo: "firmware" } };
+  const core = { info() {} }, process = { env: { TAG: "v1.1.2" } };
+  await execute(github, context, core, process);
+  assert.equal(created, 1);
+  outcome = 0;
+  await execute(github, context, core, process);
+  assert.equal(created, 1);
+  for (outcome of [403, 500]) {
+    await assert.rejects(execute(github, context, core, process), /GitHub request failed/);
+    assert.equal(created, 1);
+  }
+});

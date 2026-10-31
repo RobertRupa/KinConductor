@@ -235,3 +235,75 @@ test("UDP rule form validates per-rule port, IPv4 and UTF-8 payload byte limits"
     values[key] = original;
   }
 });
+
+test("RF24 monitor, diagnostics and rule options fail closed without explicit build support", async () => {
+  const panels = [{ hidden: false }, { hidden: false }, { hidden: false }];
+  const options = [{ value: "relay" }, { value: "rf24Send" }, { value: "rf24Saved" }];
+  const sourceSelect = {
+    children: [], value: "buttonS2",
+    append(option) {
+      option.remove = () => { this.children = this.children.filter(item => item !== option); this.value = ""; };
+      this.children.push(option);
+    },
+    querySelector() { return this.children.find(option => option.value === "rf24Packet"); }
+  };
+  const messages = new Map([["#rf24Message", {}], ["#iftttMessage", {}]]);
+  const context = vm.createContext({
+    $: id => id === "#iftttSource" ? sourceSelect : messages.get(id),
+    t: key => key, updateIftttActionFields() {}, updateIftttSourceFields() {},
+    renderRf24Monitor() {}, document: {
+      createElement() { return {}; },
+      querySelectorAll(selector) { return selector === "[data-rf24-only]" ? panels : options; }
+    }
+  });
+  const start = source.indexOf("function setRf24Support(");
+  const end = source.indexOf("function renderRf24Monitor(", start);
+  const load = source.indexOf("async function loadRf24Packets(");
+  const finish = source.indexOf("async function replaySavedRf24Packet(", load);
+  vm.runInContext("let rf24Compiled=false,rf24Available=false,rf24History=[],savedRf24Packets=[];\n" +
+    source.slice(start, end) + source.slice(load, finish), context);
+  for (const compiled of [false, undefined, null, "true"]) {
+    context.setRf24Support(compiled);
+    assert.ok(panels.every(panel => panel.hidden));
+    assert.ok(options.slice(1).every(option => option.hidden && option.disabled));
+    assert.equal(sourceSelect.children.length, 0);
+  }
+  context.setRf24Support(true);
+  assert.ok(panels.every(panel => !panel.hidden));
+  assert.equal(sourceSelect.children.length, 1);
+  context.setRf24Support(true);
+  assert.equal(sourceSelect.children.length, 1);
+  context.setRf24Support(false);
+  assert.equal(sourceSelect.children.length, 0);
+  const response = { compiled: true, available: true, history: [], saved: [] };
+  context.fetch = async () => ({ ok: true, json: async () => response });
+  await context.loadRf24Packets();
+  assert.ok(panels.every(panel => !panel.hidden));
+  delete response.compiled;
+  await context.loadRf24Packets();
+  assert.ok(panels.every(panel => panel.hidden));
+  assert.match(messages.get("#iftttMessage").textContent, /Invalid RF24 response/);
+  context.fetch = async () => { throw Error("network offline"); };
+  await context.loadRf24Packets();
+  assert.ok(panels.every(panel => panel.hidden));
+  assert.match(messages.get("#iftttMessage").textContent, /network offline/);
+});
+test("static settings inputs match complete backend ranges and RF24 starts hidden", () => {
+  const html = fs.readFileSync("data/index.html", "utf8");
+  for (const [name, min, max] of [
+    ["sensorIntervalMs", 500, 60000], ["displayPageSeconds", 2, 60],
+    ["beeperFrequencyHz", 250, 5000], ["beeperDurationMs", 50, 3000],
+    ["udpListenPort", 0, 65535], ["fanFrequencyHz", 100, 25000],
+    ["blePresenceTimeoutSeconds", 5, 3600]
+  ]) {
+    const tag = html.match(new RegExp(`<input[^>]*name="${name}"[^>]*>`))[0];
+    assert.ok(tag.includes('type="number"') && tag.includes(`min="${min}"`) &&
+      tag.includes(`max="${max}"`) && tag.includes('step="1"') && tag.includes("required"));
+  }
+  const radioPanels = [...html.matchAll(/<[^>]*data-rf24-only[^>]*>/g)].map(match => match[0]);
+  assert.equal(radioPanels.length, 3);
+  assert.ok(radioPanels.every(tag => tag.includes("hidden")));
+  for (const action of ["rf24Send", "rf24Saved"]) {
+    assert.match(html.match(new RegExp(`<option value="${action}"[^>]*>`))[0], /hidden disabled/);
+  }
+});

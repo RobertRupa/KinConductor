@@ -40,7 +40,7 @@ function harness(fetcher) {
     createElement: element
   };
   const context = vm.createContext({
-    document, window: {}, setInterval() {}, loadDeviceSettings: async () => {},
+    document, window: {}, TextEncoder, setInterval() {}, loadDeviceSettings: async () => {},
     fetch: fetcher || (async () => ({ ok: true, headers: { get: () => "application/json" }, json: async () => fixture() }))
   });
   vm.runInContext(fs.readFileSync("data/capabilities.js", "utf8"), context);
@@ -174,4 +174,38 @@ test("IFTTT exposes each saved BLE MAC once and refreshes after descriptor chang
   assert.deepEqual(options.map(option => option.value), [
     "ble.presence/AA:BB:CC:DD:EE:01/in_range", "ble.presence/AA:BB:CC:DD:EE:02/in_range"
   ]);
+});
+test("settings controls preserve full numeric ranges and render named mode choices", () => {
+  const { api, elements } = harness();
+  for (const [id, minimum, maximum] of [
+    ["sensorIntervalMs", 500, 60000], ["displayPageSeconds", 2, 60],
+    ["beeperFrequencyHz", 250, 5000], ["beeperDurationMs", 50, 3000],
+    ["udpListenPort", 0, 65535]
+  ]) {
+    const input = api.settingsInput({ id, type: "unsigned", minimum, maximum, allowedValues: [] });
+    assert.equal(input.type, "number");
+    assert.equal(input.min, minimum); assert.equal(input.max, maximum);
+    assert.equal(input.step, "1"); assert.equal(input.required, true);
+  }
+  elements.set("gpio32SensorType", { children: [
+    { value: "0", textContent: "Off" }, { value: "1", textContent: "DS18B20" },
+    { value: "2", textContent: "DHT22" }, { value: "3", textContent: "DHT11" }
+  ] });
+  const select = api.settingsInput({ id: "gpio32SensorType", type: "unsigned", minimum: 0, maximum: 3, allowedValues: [] });
+  assert.deepEqual(select.children.map(option => option.textContent), ["Off", "DS18B20", "DHT22", "DHT11"]);
+});
+test("UDP and serial data fields support newlines with exact UTF-8 byte limits", () => {
+  const { api } = harness();
+  const parameter = { id: "data", type: "text", required: true };
+  const control = api.parameterInput(parameter);
+  assert.equal(control.rows, 3); assert.equal(control.maxLength, 256);
+  const action = { id: "transport.main/serial/send", parameters: [parameter] };
+  const controls = new Map([["data", { value: "hello\nworld\r\n" }]]);
+  assert.equal(api.commandFrom(action, controls).parameters.data, "hello\nworld\r\n");
+  controls.get("data").value = "é".repeat(128);
+  assert.equal(api.commandFrom(action, controls).parameters.data.length, 128);
+  controls.get("data").value = "é".repeat(129);
+  assert.throws(() => api.commandFrom(action, controls), /out of range/);
+  controls.get("data").value = "";
+  assert.equal(api.commandFrom(action, controls).parameters.data, "");
 });

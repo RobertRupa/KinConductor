@@ -491,3 +491,28 @@ Base **1 543 376 B**, coprocessor **1 543 552 B**, static RAM **78 448 B**;
 OTA headroom **29 488 / 29 312 B**. Osiem modułów, max 63 properties.
 Nie wgrano firmware, nie opublikowano repo/tagu na GitHub. Wielourządzeniowy
 test fizycznej obecności i NVS po zaniku zasilania pozostają do wykonania.
+
+### WebGUI/RF24 i publikacja z taga — v1.1.2
+
+- [x] RF24 monitor/diagnostics/rule options domyślnie ukryte; jawne compiled
+  support wymagane. Missing/false/invalid/API failure usuwa stale radio UI.
+  Status feature flag i packet API używają wspólnego helpera.
+- [x] Pełne zakresy sampling/OLED page/beeper zamiast presetów pomijających
+  poprawne NVS wartości. Wymagane pola liczbowe, named schema mode/type/pin
+  choices, poprawna nazwa DHT11 w telemetry.
+- [x] Grid: style inputów, lokalizowane etykiety, odrzucanie pustych pozycji,
+  aktualizacja max po zmianie wymiarów. Controls/grid/cards bez overflow.
+- [x] IO/IFTTT data textarea dla multiline LF, UTF-8 max256; pusty próg IFTTT
+  i invalid RF payload odrzucane z komunikatem.
+- [x] Istniejący Actions workflow reaguje na push `v*`; dodano early version
+  check/fetch tags, serializację ref runs, draft/assets/publish z możliwością
+  retry oraz test błędów innych niż HTTP404.
+- [x] Native ASan/UBSan + 26 JS tests PASS, oba firmware/buildfs PASS,
+  actionlint1.7.7 PASS. Synthetic browser wszystkie osiem tabów przy
+  390/860/1200px; input min38px, RF24 niewidoczne, no-op save zachowuje
+  37s/2750Hz/750ms, grid resize/empty i multiline LF sprawdzone.
+- [x] README/wiki/memory/package/firmware version zaktualizowane do 1.1.2.
+
+Image sizes/headroom/RAM nie zmieniły się od v1.1.1. Nie wykonano uploadu
+na hardware, push do GitHub ani rzeczywistego Actions run. Szerszy plan
+architektury i fizyczne kryteria akceptacji pozostają otwarte.

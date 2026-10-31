@@ -33,7 +33,7 @@ Matching base firmware **without RF24** and LittleFS assets were uploaded on
 and [deployment checks](./docs/build.md#extension-deployment--2026-10-31).
 Version **1.1.0** adds hardware information in the header, persistent network
 identity in **Settings**, and current-sensor configuration in **Sensors**.
-The latest working-tree fixes add responsive dashboard inputs, grouped
+Recent releases add responsive dashboard inputs, grouped
 Settings accordions, reliable BLE scan JSON and
 [rule-specific UDP triggers](./docs/peripherals.md#rule-specific-udp-triggers).
 Set the shared UDP listen port in **Interfaces** (0 disables that listener).
@@ -45,8 +45,17 @@ Version **1.1.1** adds a saved BLE list in **Interfaces**. Each MAC appears
 separately in IFTTT as `BLE · MAC · in_range (1/0)` and is available in IO/OLED.
 Use `== 1` for entry and `== 0` for leave; initial unseen devices remain
 `warming_up`, not a valid leave event. See [BLE list details](./docs/peripherals.md#saved-ble-devices--v111).
+Version **1.1.2** keeps RF24 monitors, diagnostics and IFTTT radio options
+hidden unless firmware explicitly reports compiled support. Settings inputs
+now cover the full backend ranges, mode fields have named choices, and
+UDP/serial action data supports multiline LF text. Screen-grid inputs have
+consistent sizing and position limits that update when the grid changes.
+Both firmware and LittleFS must be updated to deploy these fixes; v1.1.2
+has not been uploaded to the physical board from this session.
 The [release workflow](./.github/workflows/release.yml) builds both profiles
-on branch pushes, pull requests and manual runs; releases require `v*` tags.
+on branch pushes, pull requests and manual runs. Pushing a matching `v*` tag
+builds firmware and LittleFS, runs tests and publishes both profile archives
+to GitHub Releases. Version/tag mismatches fail; publication can be retried.
 Local builds/packages are verified; publication and a GitHub
 Actions run have not been performed from this environment.
 

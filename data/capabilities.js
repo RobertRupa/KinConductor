@@ -103,9 +103,11 @@
     return data;
   }
   function parameterInput(param) {
-    const input = node("input");
-    input.type = param.type === "boolean" ? "checkbox" : param.type === "text" ? "text" : "number";
-    input.required = param.required && param.type !== "boolean";
+    const multiline = param.type === "text" && param.id === "data";
+    const input = node(multiline ? "textarea" : "input");
+    if (multiline) { input.rows = 3; input.maxLength = 256; }
+    else input.type = param.type === "boolean" ? "checkbox" : param.type === "text" ? "text" : "number";
+    input.required = param.required && param.type !== "boolean" && param.id !== "data";
     if (param.type === "unsigned") input.min = "0";
     if (param.minimum !== undefined) input.min = param.minimum;
     if (param.maximum !== undefined) input.max = param.maximum;
@@ -120,7 +122,12 @@
       if (!input) throw new Error(`Missing parameter: ${param.id}`);
       if (!param.required && input.value === "" && param.type !== "boolean") continue;
       if (param.type === "boolean") parameters[param.id] = input.checked;
-      else if (param.type === "text") parameters[param.id] = input.value;
+      else if (param.type === "text") {
+        if (param.required && param.id !== "data" && input.value === "") throw new Error(`Missing parameter: ${param.id}`);
+        if (param.id === "data" && new TextEncoder().encode(input.value).length > 256)
+          throw new Error(`Parameter out of range: ${param.id}`);
+        parameters[param.id] = input.value;
+      }
       else {
         const value = Number(input.value);
         if (input.value === "" || !Number.isFinite(value) ||
@@ -210,6 +217,7 @@
       select.append(option);
     }
     if ([...select.children].some((option) => option.value === previousSource)) select.value = previousSource;
+    if (typeof updateIftttSourceFields === "function") updateIftttSourceFields();
     const commands = $("iftttCapabilityAction");
     const previous = commands.value;
     commands.replaceChildren();
@@ -282,19 +290,19 @@
       section.className = "screen-page";
       section.append(node("h3", `${text("Strona", "Page")} ${index + 1}`));
       for (const dimension of ["rows", "columns"]) {
-        const label = node("label", dimension);
+        const label = node("label", dimension === "rows" ? text("Wiersze", "Rows") : text("Kolumny", "Columns"));
         const input = node("input");
-        input.type = "number"; input.min = "1"; input.max = "4"; input.value = page[dimension];
+        input.type = "number"; input.min = "1"; input.max = "4"; input.step = 1; input.required = true; input.value = page[dimension];
         input.addEventListener("change", () => {
           const value = Number(input.value);
-          if (!Number.isInteger(value) || value < 1 || value > 4 ||
+          if (input.value === "" || !Number.isInteger(value) || value < 1 || value > 4 ||
               layout.widgets.some((widget) => widget.page === index &&
                 widget[dimension === "rows" ? "row" : "column"] >= value)) {
             input.value = page[dimension];
             $("screenMessage").textContent = text("Usuń widgety poza gridem przed zmniejszeniem.", "Remove out-of-grid widgets before shrinking.");
             return;
           }
-          page[dimension] = value; updatePreviews();
+          page[dimension] = value; renderScreen();
         });
         label.append(input); section.append(label);
       }
@@ -304,22 +312,27 @@
         const editor = node("div"); editor.className = "screen-widget";
         for (const position of ["row", "column", "label", "unit", "textSize"]) {
           const caption = node("label");
-          caption.append(node("span", position));
+          const positionNames = {
+            row: ["Wiersz (od 0)", "Row (from 0)"], column: ["Kolumna (od 0)", "Column (from 0)"],
+            label: ["Etykieta", "Label"], unit: ["Jednostka", "Unit"], textSize: ["Rozmiar fonta", "Font size"]
+          };
+          caption.append(node("span", text(...positionNames[position])));
           const input = node("input"); input.setAttribute("aria-label", position);
           input.value = widget[position] ?? (position === "textSize" ? 1 : "");
           const isText = position === "label" || position === "unit";
           input.type = isText ? "text" : "number";
+          if (!isText) { input.step = 1; input.required = true; }
           if (isText) input.maxLength = position === "label" ? 16 : 8;
           else if (position === "textSize") { input.min = 1; input.max = 3; }
           else { input.min = 0; input.max = page[position === "row" ? "rows" : "columns"] - 1; }
           input.addEventListener("change", () => {
             const next = isText ? input.value : Number(input.value);
-            if (position === "textSize" && (!Number.isInteger(next) || next < 1 || next > 3)) {
+            if (position === "textSize" && (input.value === "" || !Number.isInteger(next) || next < 1 || next > 3)) {
               input.value = widget.textSize || 1;
               $("screenMessage").textContent = text("Rozmiar fonta: 1–3.", "Font size: 1–3.");
               return;
             }
-            if (!isText && position !== "textSize" && (!Number.isInteger(next) || next < 0 ||
+            if (!isText && position !== "textSize" && (input.value === "" || !Number.isInteger(next) || next < 0 ||
                 next >= page[position === "row" ? "rows" : "columns"] ||
                 layout.widgets.some((other) => other !== widget && other.page === index &&
                   other.row === (position === "row" ? next : widget.row) &&
@@ -396,6 +409,34 @@
       .map((id) => ({ id, fields: fields.filter((field) => settingsGroup(field.id) === id) }))
       .filter((group) => group.fields.length);
   }
+  function settingsInput(field) {
+    const templateIds = {
+      gpio32SensorType: "gpio32SensorType", gpio33SensorType: "gpio33SensorType",
+      uart1Mode: "uart1Mode", bluetoothMode: "bluetoothMode", displayMode: "displayMode",
+      displayRotation: "displayRotation", displayTextSize: "displayTextSize",
+      beeperPin: "beeperPin", fanPin: "fanPin"
+    };
+    const template = templateIds[field.id] && $(templateIds[field.id]);
+    const choices = template ? [...template.children].map(option => ({
+      value: Number(option.value), label: option.textContent
+    })).filter(option => Number.isInteger(option.value) &&
+      option.value >= field.minimum && option.value <= field.maximum &&
+      (!field.allowedValues.length || field.allowedValues.includes(option.value))) :
+      field.allowedValues.map(value => ({ value, label: String(value) }));
+    if (choices.length) {
+      const input = node("select");
+      input.required = true;
+      for (const choice of choices) {
+        const option = node("option", choice.label); option.value = choice.value; input.append(option);
+      }
+      return input;
+    }
+    const input = node("input"); input.type = field.type === "boolean" ? "checkbox" : "number";
+    if (field.type !== "boolean") {
+      input.min = field.minimum; input.max = field.maximum; input.step = "1"; input.required = true;
+    }
+    return input;
+  }
   async function loadSettings() {
     try {
       const [fields, settings] = await Promise.all([request("/api/settings/schema"), request("/api/settings")]);
@@ -419,16 +460,7 @@
         const container = node("div"); container.className = "schema-fields";
         for (const field of group.fields) {
           const label = node("label", field.id);
-          let input;
-          if (field.allowedValues.length) {
-            input = node("select");
-            for (const value of field.allowedValues) {
-              const option = node("option", value); option.value = value; input.append(option);
-            }
-          } else {
-            input = node("input"); input.type = field.type === "boolean" ? "checkbox" : "number";
-            if (field.type !== "boolean") { input.min = field.minimum; input.max = field.maximum; input.step = "1"; }
-          }
+          const input = settingsInput(field);
           if (field.type === "boolean") input.checked = settings[field.id];
           else input.value = settings[field.id];
           input.disabled = field.derived;
@@ -532,7 +564,7 @@
     } catch (error) { $("networkSettingsMessage").textContent = error.message; }
   }
   window.CapabilityUI = {
-    validateCapabilities, validateLayout, validateCurrent, groupedSettings, properties, actions, commandFrom, request, propertyLabel, refresh,
+    validateCapabilities, validateLayout, validateCurrent, groupedSettings, settingsInput, parameterInput, properties, actions, commandFrom, request, propertyLabel, refresh,
     getIftttCommand() {
       const action = capabilities && actions(capabilities).find((item) => item.id === $("iftttCapabilityAction").value);
       if (!action) throw new Error("No interface action available");

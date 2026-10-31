@@ -1,6 +1,7 @@
 const translations = {
   pl: {
     pageScreen: "Ekran", pageSettings: "Ustawienia", capabilityAction: "Akcja interfejsu",
+    invalidThreshold: "Wpisz poprawny próg warunku.", invalidRf24Payload: "Payload RF24 musi być liczbą całkowitą 0–4294967295.",
     bleSelectId: "Wybierz ID", bleIdSaved: "Lista BLE zapisana · in_range",
     bleRemoveId: "Usuń ID", bleInvalidId: "Nieprawidłowy MAC BLE",
     bleDuplicateId: "To urządzenie jest już zapisane", bleTargetLimit: "Limit 8 zapisanych urządzeń BLE",
@@ -125,6 +126,7 @@ const translations = {
   },
   en: {
     pageScreen: "Screen", pageSettings: "Settings", capabilityAction: "Interface action",
+    invalidThreshold: "Enter a valid condition threshold.", invalidRf24Payload: "RF24 payload must be an integer from 0 to 4294967295.",
     bleSelectId: "Select ID", bleIdSaved: "BLE list saved · in_range",
     bleRemoveId: "Remove ID", bleInvalidId: "Invalid BLE MAC",
     bleDuplicateId: "This device is already saved", bleTargetLimit: "Limit of 8 saved BLE devices",
@@ -259,6 +261,7 @@ let rf24History = [];
 let savedRf24Packets = [];
 let nearbyBluetoothDevices = [];
 let rf24Available = false;
+let rf24Compiled = false;
 let lastRf24RefreshAt = 0;
 let lastBoardStatus = null;
 let lastBoardRefreshAt = 0;
@@ -483,7 +486,7 @@ function renderStatus(data) {
 
   const sensorConfig = data.sensorConfig || {};
   const sensorTypes = [sensorConfig.gpio32SensorType, sensorConfig.gpio33SensorType];
-  const sensorTypeLabels = ["", "DS18B20", "DHT22"];
+  const sensorTypeLabels = ["", "DS18B20", "DHT22", "DHT11"];
   $("#sensorTemp1Name").textContent = sensorTypes[0] === 0 ? "GPIO32 · OFF" : `${sensorTypeLabels[sensorTypes[0]]} · GPIO32`;
   $("#sensorTemp2Name").textContent = sensorTypes[1] === 0 ? "GPIO33 · OFF" : `${sensorTypeLabels[sensorTypes[1]]} · GPIO33`;
   $("#sensorTemp1").textContent = sensorConfig.temperature1Enabled === false
@@ -503,6 +506,7 @@ function renderStatus(data) {
   $("#sensorCompass").textContent = sensorConfig.compassEnabled === false
     ? t("disabled") : compass.length === 3 ? compass.join(" / ") : "--";
   const rf24 = data.rf24 || {};
+  setRf24Support(data.features?.rf24 === true);
   const beeper = data.beeper || {};
   $("#diagnosticRf24State").textContent = rf24.available ? "OK · CH76" : t("notDetected");
   $("#diagnosticRf24Packet").textContent = rf24.packetAvailable
@@ -641,6 +645,37 @@ function populateSettingsForms(settings) {
   updateIftttActionFields();
 }
 
+function setRf24Support(compiled) {
+  rf24Compiled = compiled === true;
+  document.querySelectorAll("[data-rf24-only]").forEach(element => {
+    element.hidden = !rf24Compiled;
+  });
+  const source = $("#iftttSource");
+  const existing = source.querySelector("option[value='rf24Packet']");
+  if (rf24Compiled && !existing) {
+    const option = document.createElement("option");
+    option.value = "rf24Packet";
+    option.textContent = t("sourceRf24");
+    source.append(option);
+  } else if (!rf24Compiled && existing) {
+    existing.remove();
+    if (!source.value) source.value = "buttonS2";
+    updateIftttSourceFields();
+  }
+  for (const option of document.querySelectorAll("#iftttAction option")) {
+    if (option.value === "rf24Send" || option.value === "rf24Saved") {
+      option.hidden = !rf24Compiled;
+      if (!rf24Compiled) option.disabled = true;
+    }
+  }
+  if (!rf24Compiled) {
+    rf24Available = false;
+    rf24History = [];
+    savedRf24Packets = [];
+    updateIftttActionFields();
+  }
+}
+
 function renderRf24Monitor() {
   const state = $("#rf24MonitorState");
   if (state) state.textContent = rf24Available ? "READY · CH76" : t("notDetected");
@@ -736,26 +771,20 @@ function renderRf24Monitor() {
 async function loadRf24Packets() {
   try {
     const response = await fetch("/api/rf24/packets", { cache: "no-store" });
-    if (!response.ok) throw new Error("rf24");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const result = await response.json();
-    document.querySelector(".rf24-monitor-panel").hidden = result.compiled === false;
-    const source = $("#iftttSource");
-    if (result.compiled === true && !source.querySelector("option[value='rf24Packet']")) {
-      const option = document.createElement("option");
-      option.value = "rf24Packet";
-      option.textContent = t("sourceRf24");
-      source.append(option);
-    }
-    for (const option of document.querySelectorAll("#iftttAction option")) {
-      if (option.value === "rf24Send" || option.value === "rf24Saved") option.hidden = result.compiled === false;
-    }
-    rf24Available = Boolean(result.available);
-    rf24History = Array.isArray(result.history) ? result.history : [];
-    savedRf24Packets = Array.isArray(result.saved) ? result.saved : [];
+    if (typeof result.compiled !== "boolean" || typeof result.available !== "boolean" ||
+        !Array.isArray(result.history) || !Array.isArray(result.saved)) throw new Error("Invalid RF24 response");
+    setRf24Support(result.compiled);
+    rf24Available = rf24Compiled && result.available;
+    rf24History = rf24Compiled ? result.history : [];
+    savedRf24Packets = rf24Compiled ? result.saved : [];
     renderRf24Monitor();
-  } catch {
-    rf24Available = false;
+  } catch (error) {
+    setRf24Support(false);
     renderRf24Monitor();
+    $("#rf24Message").textContent = `${t("rf24Error")} ${error.message}`;
+    $("#iftttMessage").textContent = `${t("rf24Error")} ${error.message}`;
   }
 }
 
@@ -1143,8 +1172,8 @@ function updateIftttActionFields() {
   const rf24Option = $("#iftttAction option[value='rf24Send']");
   const savedRf24Option = $("#iftttAction option[value='rf24Saved']");
   beeperOption.disabled = !deviceSettings.beeperEnabled;
-  rf24Option.disabled = !rf24Available;
-  savedRf24Option.disabled = !rf24Available || savedRf24Packets.length === 0;
+  rf24Option.disabled = !rf24Compiled || !rf24Available;
+  savedRf24Option.disabled = !rf24Compiled || !rf24Available || savedRf24Packets.length === 0;
   if (action === "beeper" && beeperOption.disabled) $("#iftttAction").value = "relay";
   if (action === "rf24Send" && rf24Option.disabled) $("#iftttAction").value = "relay";
   if (action === "rf24Saved" && savedRf24Option.disabled) $("#iftttAction").value = "relay";
@@ -1186,6 +1215,17 @@ function udpRuleFromForm() {
 $("#addIftttRule").addEventListener("click", () => {
   if (iftttRules.length >= 4) return;
   const action = $("#iftttAction").value;
+  if ($("#iftttSource").value !== "udpPacket" && $("#iftttComparison").value !== "changed" &&
+      ($("#iftttThreshold").value === "" || !Number.isFinite(Number($("#iftttThreshold").value)))) {
+    $("#iftttMessage").textContent = t("invalidThreshold");
+    return;
+  }
+  if (action === "rf24Send" && ($("#iftttRfPayload").value === "" ||
+      !Number.isInteger(Number($("#iftttRfPayload").value)) ||
+      Number($("#iftttRfPayload").value) < 0 || Number($("#iftttRfPayload").value) > 4294967295)) {
+    $("#iftttMessage").textContent = t("invalidRf24Payload");
+    return;
+  }
   let udp;
   if ($("#iftttSource").value === "udpPacket") {
     try { udp = udpRuleFromForm(); }
