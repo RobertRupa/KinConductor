@@ -13,7 +13,7 @@
 
 	Use the correct COM port on Windows. Firmware and filesystem are separate
 	uploads; do not combine the targets in one command.
-	For existing installations upgrading to the 1.1.5 partition layout, use
+	For existing installations upgrading to the 1.1.5-or-later partition layout, use
 	the one-time migration procedure in [Build, upload and validation](./build.md)
 	instead of these routine upload commands.
 2. Join the open `KC868-A6-XXXX` access point and open `http://192.168.4.1`.

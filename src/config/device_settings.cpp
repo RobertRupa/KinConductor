@@ -3,10 +3,15 @@
 namespace kc868a6::config {
 namespace {
 
-const std::array<uint32_t, 5> baudRates{{9600, 19200, 38400, 57600, 115200}};
+const std::array<uint32_t, 8> baudRates{{1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200}};
 const std::array<uint32_t, 2> i2cClocks{{50000, 100000}};
 const std::array<uint32_t, 2> outputPins{{25, 26}};
-const std::array<SettingDescriptor, 33> schema{{
+const std::array<uint32_t, 2> serialProtocols{{0, 1}};
+const std::array<uint32_t, 4> serialDataBits{{5, 6, 7, 8}};
+const std::array<uint32_t, 3> serialParities{{0, 1, 2}};
+const std::array<uint32_t, 2> serialStopBits{{1, 2}};
+const std::array<uint32_t, 2> serial2Routes{{0, 1}};
+const std::array<SettingDescriptor, 43> schema{{
     {"sensorIntervalMs", "sensor_ms", &DeviceSettings::sensorIntervalMs, 500, 60000, {}},
     {"i2cClockHz", "i2c_hz", &DeviceSettings::i2cClockHz, 50000, 100000, i2cClocks},
     {"rs485Baud", "rs485_baud", &DeviceSettings::rs485Baud, 9600, 115200, baudRates},
@@ -40,6 +45,16 @@ const std::array<SettingDescriptor, 33> schema{{
     {"fanFrequencyHz", "fan_hz", &DeviceSettings::fanFrequencyHz, 100, 25000, {}},
     {"udpListenPort", "udp_port", &DeviceSettings::udpListenPort, 0, 65535, {}},
     {"blePresenceTimeoutSeconds", "ble_timeout", &DeviceSettings::blePresenceTimeoutSeconds, 5, 3600, {}},
+    {"serial1Protocol", "ser1_proto", &DeviceSettings::serial1Protocol, 0, 1, serialProtocols},
+    {"serial2Protocol", "ser2_proto", &DeviceSettings::serial2Protocol, 0, 1, serialProtocols},
+    {"serial1DataBits", "ser1_bits", &DeviceSettings::serial1DataBits, 5, 8, serialDataBits},
+    {"serial2DataBits", "ser2_bits", &DeviceSettings::serial2DataBits, 5, 8, serialDataBits},
+    {"serial1Parity", "ser1_parity", &DeviceSettings::serial1Parity, 0, 2, serialParities},
+    {"serial2Parity", "ser2_parity", &DeviceSettings::serial2Parity, 0, 2, serialParities},
+    {"serial1StopBits", "ser1_stop", &DeviceSettings::serial1StopBits, 1, 2, serialStopBits},
+    {"serial2StopBits", "ser2_stop", &DeviceSettings::serial2StopBits, 1, 2, serialStopBits},
+    {"serial2Route", "ser2_route", &DeviceSettings::serial2Route, 0, 1, serial2Routes},
+    {"ebusWritesEnabled", "ebus_write", &DeviceSettings::ebusWritesEnabled, 0, 1, {}},
 }};
 
 }  // namespace
@@ -74,6 +89,14 @@ core::Result validateSettings(const DeviceSettings &settings) {
             if (field.allowedValues.data[allowed] == value) found = true;
         }
         if (!found) return {core::ErrorCode::InvalidArgument, field.name};
+    }
+    if (settings.uart1Mode != 0 && settings.serial1Protocol != 0) {
+        return {core::ErrorCode::ResourceConflict, "uart1.mode"};
+    }
+    if (settings.uart1Mode != 0 &&
+        (settings.serial1DataBits != 8 || settings.serial1Parity != 0 ||
+         settings.serial1StopBits != 1)) {
+        return {core::ErrorCode::ResourceConflict, "uart1.framing"};
     }
     return {};
 }

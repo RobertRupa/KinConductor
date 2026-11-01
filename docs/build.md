@@ -18,7 +18,7 @@ Select the serial upload port in the PlatformIO toolbar or add
 `upload_port = /dev/ttyUSB0` to `platformio.ini` for your system.
 Use the matching `-e` environment when uploading a feature-specific build.
 
-## Version 1.1.5 working tree: single app and optimized builds
+## Version 1.1.6 working tree: serial profiles and boiler interface
 
 The repository has no firmware OTA updater; the former second application slot
 was unused. The partition table now has one **2.25 MiB** factory application
@@ -28,12 +28,11 @@ slot. The partition migration has not been tested on hardware; follow the
 [one-time migration procedure](#deployment-precautions-and-current-profiles).
 
 All ten configured profiles build cleanly with no compiler or partition
-warnings. Firmware images are **1,495,568–1,495,728 B**; each LittleFS image is
-**1,703,936 B**. Release builds use `-Os`, `-g0` and `-fno-exceptions`; the
-toolchain already disables RTTI. The base firmware image is about **49 KiB
-smaller** than v1.1.4. Static RAM remains **78,448 B**: removing debug symbols
-and optimizing for size reduces flash usage, not runtime RAM. Do not treat
-static RAM as a runtime heap or stack measurement.
+warnings. The maintained A6/coprocessor firmware images are **1,522,080 B**
+and **1,522,240 B**;
+each LittleFS image is **1,703,936 B**. The A6 build uses **81,472 B** of static
+DRAM. Release builds use `-Os`, `-g0` and `-fno-exceptions`; the toolchain
+already disables RTTI. Static DRAM is not runtime heap or stack measurement.
 
 ## Version 1.1.0: historical validation
 
@@ -81,7 +80,7 @@ but persisted IFTTT rules can act after startup. Uploading resets the controller
 Do not erase NVS or alter the partition table as part of routine deployment.
 Uploading LittleFS replaces the web-assets filesystem.
 
-The 1.1.5 working tree removes the unused second OTA app slot: firmware updates
+The v1.1.5 release removed the unused second OTA app slot: firmware updates
 are serial-only and have no OTA rollback path. Its factory app partition is
 2.25 MiB and LittleFS is 1.625 MiB at `0x250000`; NVS remains at `0x9000`,
 `0x5000`. PlatformIO's normal `upload` writes only the application, not the
@@ -108,7 +107,9 @@ not an implemented P17 or Zigbee/Thread bridge. Stored settings override
 defaults. `KC868_BOARD_PROFILE_COPROCESSOR` is currently an unused marker;
 `KC868_BOARD_PN532_SPI` only selects the resource-plan transport.
 Other `KC868_BOARD_*` options currently affect reservation validation, not
-hardware routing; do not use them to claim working P17/DAC/PN532-I2C support.
+hardware routing. UART2 P17 routing is runtime-configurable in Settings but
+has not been physically validated. Do not infer DAC or PN532-I2C support from
+resource-planner reservations.
 
 Separate GPS/LoRa/nRF24 environments were removed. GPS and radio code still
 uses compile flags; selecting GPS mode in the settings remains possible.

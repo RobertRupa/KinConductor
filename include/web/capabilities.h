@@ -4,7 +4,7 @@
 #include "core/peripheral_registry.h"
 
 namespace kc868a6::web {
-constexpr size_t capabilitiesJsonCapacity = JSON_OBJECT_SIZE(800) + 8192;
+constexpr size_t capabilitiesJsonCapacity = JSON_OBJECT_SIZE(1050) + 8192;
 const char *valueTypeName(core::ValueType type);
 const char *qualityName(core::Quality quality);
 core::Result writeCapabilities(JsonObject destination, const core::PeripheralRegistry &registry,

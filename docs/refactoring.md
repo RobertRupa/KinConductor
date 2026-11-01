@@ -173,7 +173,7 @@ with a `command` object using the same action shape. Legacy rules and controls
 remain compatible. Rules still use the existing four-rule evaluator and storage;
 this is not a new event engine, cron scheduler or transactional rules service.
 
-`/api/settings/schema` exposes the shared 27-field settings schema with bounds,
+`/api/settings/schema` exposes the shared 43-field settings schema with bounds,
 allowed values and derived flags. The Settings page generates a form from it.
 It is an **application settings schema**, not separate `IConfigurable` ownership
 for each sensor or protocol. The existing Sensors/Interfaces forms remain.
@@ -201,8 +201,8 @@ fields and creating a capability IFTTT rule with no page errors. This preview
 does not control hardware; it is not a substitute for firmware endpoint tests.
 
 Still pending: full modular WebGUI/page providers, remaining tab separation,
-per-module configuration ownership, other peripheral/transport drivers,
-relay RAM/NVS restart policy, P17/coprocessor bridge, new display controllers,
+per-module configuration ownership, other peripheral drivers,
+relay RAM/NVS restart policy, coprocessor/custom bridge, new display controllers,
 NTP/scheduler, network settings and mDNS configuration. See the
 [annotated task plan](../REFACTOR_TODO.md).
 
@@ -225,7 +225,10 @@ The following extension is implemented and deployed in the base A6 profile:
 - **Transport** adds Wi-Fi connection state, UDP and two UART receive counters
   plus last received text, and UDP/serial send actions. UDP RX is off at port `0`.
   UART1 is unavailable to this module while GPS/coprocessor owns it; UART2
-  retains the existing RS485 transceiver. Serial settings still select baud.
+  UART1 is unavailable to this module while GPS/coprocessor owns it; UART2
+  retains the existing RS485 transceiver by default. Serial settings select
+  protocol, baud, data bits, parity and stop bits; UART2 can instead route to
+  P17 TTL, with PN532 GPIO13 conflict checked by the resource planner.
   LF/CRLF or a 25 ms idle gap terminates a UART frame. Payloads are bounded to
   256 bytes and validated UTF-8/printable text with TAB/CR/LF; overflow discards
   a frame with an explicit error, never truncates it silently. This is not a

@@ -29,7 +29,7 @@ English unless another language is explicitly requested.
   not raw-waveform AC RMS, automatic calibration or overcurrent protection.
 - Default hostname is **kinconductor**, without `.local`; mDNS adds the suffix.
 - Routine firmware and LittleFS updates are separate operations, preserve NVS,
-  and require safe-load/port approval. The 1.1.5 working tree uses a single
+  and require safe-load/port approval. The 1.1.5 partition layout uses a single
   factory application partition with no OTA rollback; its factory image spans
   NVS and is not an NVS-preserving routine update.
 
@@ -47,6 +47,14 @@ English unless another language is explicitly requested.
   composite action; the runtime still mirrors rule JSON in a `String` and
   parses it into a transient 8 KiB `DynamicJsonDocument` during evaluation.
 - Rule UDP: distinct local ports, share one socket for duplicate ports,
+  - Serial profiles: settings record v3 preserves v1/v2 imports and configures
+    UART framing, raw serial or Modbus RTU client. UART2 can replace RS-485 with
+    P17 TTL; GPIO13/PN532 and GPIO12 strap conflicts are validated. Modbus uses
+    the callback-based `modbus-esp8266` 4.1.1 upstream tag. eBUS is named
+    `ebusd` TCP client traffic on port 8888, not the adapter's enhanced host
+    protocol or `micro-ebusd` HTTP API. eBUS values update only after a named
+    action; writes are disabled by default and ebusd authentication is unsupported.
+  - Rule UDP: distinct local ports, share one socket for duplicate ports,
   optional sender IP/port and exact/contains text. Maximum four distinct
   sockets across eight rule slots, 256 UTF-8 bytes, bounded queued matches.
   Global UDP port must not collide.

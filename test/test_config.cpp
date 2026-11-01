@@ -78,8 +78,11 @@ void testDefaultsAndSchema() {
     assert(config::validateSettings(serial).ok());
     assert(config::validateSettings(gps).ok());
     assert(config::validateSettings(peer).ok());
+    auto incompatibleGps = gps;
+    incompatibleGps.serial1Parity = 1;
+    assert(config::validateSettings(incompatibleGps).code == core::ErrorCode::ResourceConflict);
     const auto schema = config::settingsSchema();
-    assert(schema.size == 33);
+    assert(schema.size == 43);
     const char *legacyKeys[] = {
         "sensor_ms", "i2c_hz", "rs485_baud", "uart1_baud", "uart1_mode",
         "beep_hz", "beep_ms", "gpio32_type", "gpio33_type", "display_mode",
@@ -87,6 +90,8 @@ void testDefaultsAndSchema() {
         "display_fields", "bt_mode", "beep_on", "display_on", "s2_input",
         "temp1_on", "temp2_on", "bme_on", "ens_on", "compass_on", "gps_on",
         "rtc_on", "pn532_on", "beep_pin", "fan_on", "fan_pin", "fan_hz", "udp_port", "ble_timeout",
+        "ser1_proto", "ser2_proto", "ser1_bits", "ser2_bits", "ser1_parity", "ser2_parity",
+        "ser1_stop", "ser2_stop", "ser2_route", "ebus_write",
     };
     for (size_t index = 0; index < schema.size; ++index) {
         assert(std::string_view(schema.data[index].legacyKey) == legacyKeys[index]);
@@ -103,7 +108,7 @@ void testJsonCompatibilityAndRoundTrip() {
     const auto settings = fixture();
     DynamicJsonDocument document(config::settingsJsonCapacity);
     assert(config::writeSettingsJson(document.to<JsonObject>(), settings).ok());
-    assert(document.size() == 33 && !document.overflowed());
+    assert(document.size() == 43 && !document.overflowed());
     assert(document["sensorIntervalMs"].as<uint32_t>() == 60000);
     assert(document["displayBrightness"].as<uint32_t>() == 255);
     assert(document["temperature2Enabled"].as<bool>());
@@ -129,7 +134,10 @@ void testJsonCompatibilityAndRoundTrip() {
         "\"compassEnabled\":true,\"gpsEnabled\":false,\"rtcEnabled\":true,"
         "\"pn532Enabled\":true,\"beeperPin\":26,\"fanEnabled\":false,"
         "\"fanPin\":25,\"fanFrequencyHz\":1000,\"udpListenPort\":0,"
-        "\"blePresenceTimeoutSeconds\":60}");
+        "\"blePresenceTimeoutSeconds\":60,\"serial1Protocol\":0,\"serial2Protocol\":0,"
+        "\"serial1DataBits\":8,\"serial2DataBits\":8,\"serial1Parity\":0,"
+        "\"serial2Parity\":0,\"serial1StopBits\":1,\"serial2StopBits\":1,"
+        "\"serial2Route\":0,\"ebusWritesEnabled\":false}");
 }
 
 void testPartialPatchAndTypes() {
@@ -151,6 +159,9 @@ void testPartialPatchAndTypes() {
         "{\"displayTextSize\":0}", "{\"uart1Baud\":460800}",
         "{\"i2cClockHz\":75000}", "{\"gpio32SensorType\":4}",
         "{\"bluetoothMode\":3}", "{\"displayRotation\":4}",
+        "{\"serial1Protocol\":2}", "{\"serial2DataBits\":9}",
+        "{\"serial1Parity\":3}", "{\"serial2StopBits\":0}", "{\"serial2Route\":2}",
+        "{\"serial1Protocol\":1}",
         "{\"sensorIntervalMs\":500,\"displayFieldMask\":64}",
     };
     for (const char *json : invalid) {
@@ -202,6 +213,18 @@ void testRecordVersionAndCapacity() {
     assert(config::readSettingsRecord(document.as<JsonVariantConst>(), decoded).ok());
     assert(decoded.fanPin == 25 && decoded.beeperPin == 26 && !decoded.fanEnabled);
     assert(decoded.blePresenceTimeoutSeconds == 60 && decoded.udpListenPort == 0);
+    document.clear();
+    document["schemaVersion"] = 2;
+    auto oldSettings = document.createNestedObject("settings");
+    assert(config::writeSettingsJson(oldSettings, settings).ok());
+    for (const auto *name : {"serial1Protocol", "serial2Protocol", "serial1DataBits",
+                             "serial2DataBits", "serial1Parity", "serial2Parity",
+                             "serial1StopBits", "serial2StopBits"}) {
+        oldSettings.remove(name);
+    }
+    assert(config::readSettingsRecord(document.as<JsonVariantConst>(), decoded).ok());
+            assert(decoded.serial1Protocol == 0 && decoded.serial2DataBits == 8 &&
+                decoded.serial2Route == 0 && !decoded.ebusWritesEnabled);
     document.clear();
     assert(config::writeSettingsRecord(document.to<JsonObject>(), settings).ok());
     document["schemaVersion"] = config::settingsRecordVersion;

@@ -14,7 +14,10 @@
   const parameterLabels = {
     channel: ["Kanał", "Channel"], on: ["Włączony", "On"],
     percent: ["Wysterowanie (%)", "Duty (%)"], host: ["Adres docelowy", "Destination"],
-    port: ["Port", "Port"], data: ["Dane", "Data"]
+    port: ["Port", "Port"], data: ["Dane", "Data"], unit: ["ID urządzenia", "Unit ID"],
+    address: ["Adres rejestru", "Register address"], count: ["Liczba rejestrów", "Register count"],
+    value: ["Wartość", "Value"], circuit: ["Obwód eBUS", "eBUS circuit"],
+    name: ["Komunikat eBUS", "eBUS message"], field: ["Pole odpowiedzi", "Response field"]
   };
   function propertyLabel(prop) {
     const adc = prop.id.match(/^adc\.main\/channel\/(\d+)\/raw$/);
@@ -30,6 +33,12 @@
       "transport.main/udp/rx/count": ["UDP · licznik odbioru", "UDP · receive count"],
       "transport.main/serial/1/rx/count": ["RS232 · licznik odbioru", "RS232 · receive count"],
       "transport.main/serial/2/rx/count": ["RS485 · licznik odbioru", "RS485 · receive count"],
+      "transport.main/modbus/sequence": ["Modbus · licznik odpowiedzi", "Modbus · response sequence"],
+      "transport.main/modbus/last/value": ["Modbus · ostatni rejestr", "Modbus · last register"],
+      "transport.main/modbus/last/ok": ["Modbus · ostatnia operacja OK", "Modbus · last operation OK"],
+      "transport.main/ebus/sequence": ["eBUS · licznik odpowiedzi", "eBUS · response sequence"],
+      "transport.main/ebus/last/value": ["eBUS · ostatnia wartość liczbowa", "eBUS · last numeric value"],
+      "transport.main/ebus/connected": ["eBUS · TCP dostępne", "eBUS · TCP available"],
       "fan.main/duty": ["PWM · wysterowanie (%)", "PWM · duty (%)"]
     };
     if (labels[prop.id]) return text(...labels[prop.id]);
@@ -107,6 +116,9 @@
     const input = node(multiline ? "textarea" : "input");
     if (multiline) { input.rows = 3; input.maxLength = 256; }
     else input.type = param.type === "boolean" ? "checkbox" : param.type === "text" ? "text" : "number";
+    if (param.type === "text" && !multiline) {
+      input.maxLength = ({ host: 253, circuit: 32, name: 64, field: 32, value: 32 })[param.id] || 256;
+    }
     input.required = param.required && param.type !== "boolean" && param.id !== "data";
     if (param.type === "unsigned") input.min = "0";
     if (param.minimum !== undefined) input.min = param.minimum;
@@ -126,6 +138,12 @@
         if (param.required && param.id !== "data" && input.value === "") throw new Error(`Missing parameter: ${param.id}`);
         if (param.id === "data" && new TextEncoder().encode(input.value).length > 256)
           throw new Error(`Parameter out of range: ${param.id}`);
+        if (param.id === "host" && input.value !== "" && !validEbusHost(input.value))
+          throw new Error(`Invalid parameter: ${param.id}`);
+        const ebusTokenLimit = ({ circuit: 32, name: 64, field: 32, value: 32 })[param.id];
+        if (ebusTokenLimit && (input.value.length > ebusTokenLimit ||
+          !/^[A-Za-z0-9_.+-]+$/.test(input.value)))
+          throw new Error(`Invalid parameter: ${param.id}`);
         parameters[param.id] = input.value;
       }
       else {
@@ -144,6 +162,11 @@
       }
     }
     return { id: action.id, parameters };
+  }
+  function validEbusHost(host) {
+    return host.length <= 253 && host.split(".").every((label) =>
+      label.length >= 1 && label.length <= 63 &&
+      /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label));
   }
   function renderParameters(container, action) {
     container.replaceChildren();
@@ -401,7 +424,7 @@
     if (/^display/.test(id)) return "screen";
     if (/^(beeper|fan)/.test(id)) return "outputs";
     if (/^bluetooth|^ble/.test(id)) return "bluetooth";
-    if (/^(udp|uart|rs485|i2c)/.test(id)) return "interfaces";
+    if (/^(udp|uart|serial|rs485|i2c|ebus)/.test(id)) return "interfaces";
     return "inputs";
   }
   function groupedSettings(fields) {
@@ -416,8 +439,21 @@
       displayRotation: "displayRotation", displayTextSize: "displayTextSize",
       beeperPin: "beeperPin", fanPin: "fanPin"
     };
+    const namedChoices = {
+      serial1Protocol: [[0, "Surowy serial", "Raw serial"], [1, "Modbus RTU", "Modbus RTU"]],
+      serial2Protocol: [[0, "Surowy serial", "Raw serial"], [1, "Modbus RTU", "Modbus RTU"]],
+      serial2Route: [[0, "RS-485 · GPIO14/27", "RS-485 · GPIO14/27"], [1, "P17 TTL · GPIO12/13", "P17 TTL · GPIO12/13"]],
+      serial1DataBits: [5, 6, 7, 8].map(value => [value, String(value), String(value)]),
+      serial2DataBits: [5, 6, 7, 8].map(value => [value, String(value), String(value)]),
+      serial1Parity: [[0, "Brak", "None"], [1, "Parzysta", "Even"], [2, "Nieparzysta", "Odd"]],
+      serial2Parity: [[0, "Brak", "None"], [1, "Parzysta", "Even"], [2, "Nieparzysta", "Odd"]],
+      serial1StopBits: [[1, "1 bit", "1 bit"], [2, "2 bity", "2 bits"]],
+      serial2StopBits: [[1, "1 bit", "1 bit"], [2, "2 bity", "2 bits"]]
+    };
     const template = templateIds[field.id] && $(templateIds[field.id]);
-    const choices = template ? [...template.children].map(option => ({
+    const choices = namedChoices[field.id] ? namedChoices[field.id].map(([value, pl, en]) => ({
+      value, label: text(pl, en)
+    })) : template ? [...template.children].map(option => ({
       value: Number(option.value), label: option.textContent
     })).filter(option => Number.isInteger(option.value) &&
       option.value >= field.minimum && option.value <= field.maximum &&
@@ -436,6 +472,23 @@
       input.min = field.minimum; input.max = field.maximum; input.step = "1"; input.required = true;
     }
     return input;
+  }
+  function settingsLabel(id) {
+    const labels = {
+      uart1Baud: ["UART1 · baud", "UART1 · baud"],
+      rs485Baud: ["UART2 · baud", "UART2 · baud"],
+      serial1Protocol: ["Protokół UART1", "UART1 protocol"],
+      serial2Protocol: ["Protokół UART2", "UART2 protocol"],
+      serial1DataBits: ["UART1 · bity danych", "UART1 · data bits"],
+      serial2DataBits: ["UART2 · bity danych", "UART2 · data bits"],
+      serial1Parity: ["UART1 · parzystość", "UART1 · parity"],
+      serial2Parity: ["UART2 · parzystość", "UART2 · parity"],
+      serial1StopBits: ["UART1 · bity stopu", "UART1 · stop bits"],
+      serial2StopBits: ["UART2 · bity stopu", "UART2 · stop bits"],
+      serial2Route: ["UART2 · trasa fizyczna", "UART2 · physical route"],
+      ebusWritesEnabled: ["Zezwalaj na zapis eBUS (ostrożnie)", "Allow eBUS writes (verify setup)"]
+    };
+    return labels[id] ? text(...labels[id]) : id;
   }
   async function loadSettings() {
     try {
@@ -459,7 +512,7 @@
         section.append(node("summary", text(...titles[group.id])));
         const container = node("div"); container.className = "schema-fields";
         for (const field of group.fields) {
-          const label = node("label", field.id);
+          const label = node("label", settingsLabel(field.id));
           const input = settingsInput(field);
           if (field.type === "boolean") input.checked = settings[field.id];
           else input.value = settings[field.id];
@@ -468,6 +521,27 @@
           label.append(input); container.append(label); settingsControls.set(field.id, input);
         }
         section.append(container); $("schemaFields").append(section);
+      }
+      const uart1Mode = settingsControls.get("uart1Mode");
+      if (uart1Mode) {
+        uart1Mode.addEventListener("change", () => {
+          const reserved = Number(uart1Mode.value) !== 0;
+          if (reserved) {
+            settingsControls.get("serial1Protocol").value = 0;
+            settingsControls.get("serial1DataBits").value = 8;
+            settingsControls.get("serial1Parity").value = 0;
+            settingsControls.get("serial1StopBits").value = 1;
+            settingsControls.get("uart1Baud").value = Number(uart1Mode.value) === 2 ? 115200 : 9600;
+          }
+          for (const id of ["serial1Protocol", "serial1DataBits", "serial1Parity", "serial1StopBits"]) {
+            settingsControls.get(id).disabled = reserved;
+          }
+        });
+        if (Number(uart1Mode.value) !== 0) {
+          for (const id of ["serial1Protocol", "serial1DataBits", "serial1Parity", "serial1StopBits"]) {
+            settingsControls.get(id).disabled = true;
+          }
+        }
       }
       $("schemaMessage").textContent = "";
     } catch (error) { $("schemaMessage").textContent = error.message; }

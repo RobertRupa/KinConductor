@@ -78,16 +78,17 @@ core::Result readSettingsRecord(JsonVariantConst source, DeviceSettings &setting
         return {core::ErrorCode::InvalidArgument, "settings_record"};
     }
     const auto version = source["schemaVersion"].as<uint32_t>();
-    if (version != 1 && version != settingsRecordVersion) {
+    if (version < 1 || version > settingsRecordVersion) {
         return {core::ErrorCode::UnsupportedVersion, "device_settings"};
     }
     const auto object = source.as<JsonObjectConst>();
     if (object.size() != 2 || !object.containsKey("settings")) {
         return {core::ErrorCode::InvalidArgument, "settings_record"};
     }
-    if (version == 1) {
+    if (version < settingsRecordVersion) {
         const auto schema = settingsSchema();
-        for (size_t index = 0; index < 27; ++index) {
+        const size_t requiredFields = version == 1 ? 27 : 33;
+        for (size_t index = 0; index < requiredFields; ++index) {
             if (!object["settings"].containsKey(schema.data[index].name)) {
                 return {core::ErrorCode::InvalidArgument, schema.data[index].name};
             }

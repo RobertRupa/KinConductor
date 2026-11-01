@@ -569,3 +569,26 @@ architektury i fizyczne kryteria akceptacji pozostają otwarte.
   LittleFS images built successfully with the 1.1.3 metadata.
 - [ ] Create and push the immutable `v1.1.3` tag; verify the remote tag-triggered
   GitHub Actions build and release before claiming publication succeeded.
+
+### Serial profiles, Modbus RTU and Vaillant eBUS — 2026-11-01
+
+- [x] Created branch `feature/serial-protocols-ebus-modbus`; persisted raw/
+  Modbus RTU selection, baud, data/parity/stop framing, UART2 P17 route and
+  opt-in eBUS writes in settings record v3. Existing v1/v2 records remain
+  readable with safe defaults.
+- [x] Modbus RTU actions use the callback-based `modbus-esp8266` 4.1.1 tag,
+  one transaction at a time, bounded reads (16 registers), response snapshots,
+  raw-serial exclusion and registry-driven IFTTT/UI actions.
+- [x] eBUS actions use named `ebusd` command TCP on port 8888, with bounded
+  response polling, `last/value`, `last/text`, sequence/connection state and
+  IFTTT properties. Adapter enhanced port 9999, micro-ebusd HTTP, direct eBUS
+  serial and ebusd authentication are not implemented. Boiler writes default
+  OFF and require explicit opt-in.
+- [x] `npm test` passed, including ASan/UBSan native suites and 30 Node tests.
+  `pio run -e kc868-a6 -e kc868-a6-coprocessor` and matching `buildfs` for both
+  profiles passed. Maximum eight-module capabilities JSON fits the tested
+  1050-slot + 8192-byte pool. This is a host/build result, not a heap test on A6.
+- [ ] Confirm VU/VUW PL 200/3-5 product/HW/SW IDs with `ebusd scan`/`info`;
+  test the v6 adapter, external ebusd host, Modbus equipment, RS-485 direction,
+  P17 electrical/strap behavior, Wi-Fi recovery and boiler writes physically.
+  No firmware or filesystem upload was performed.

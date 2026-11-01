@@ -22,6 +22,14 @@ public:
     uint16_t listenPort = 0;
     std::deque<std::string> packets;
     std::array<std::deque<unsigned char>, 2> serial;
+    peripherals::ModbusRequest modbusRequest{};
+    peripherals::ModbusResponse modbusResponse{};
+    bool modbusPending = false;
+    bool modbusResponseReady = false;
+    std::string ebusCommand;
+    peripherals::EbusResponse ebusResponse{};
+    bool ebusPending = false;
+    bool ebusResponseReady = false;
     bool wifiConnected() const override { return connected; }
     core::Result listenUdp(uint16_t port) override {
         ++listens;
@@ -55,6 +63,34 @@ public:
     core::ActionResult serialSend(uint8_t, std::string_view) override {
         ++sends; return sendResult;
     }
+    core::Result startModbus(const peripherals::ModbusRequest &request) override {
+        modbusRequest = request;
+        modbusPending = true;
+        return {};
+    }
+    bool pollModbus(peripherals::ModbusResponse &response) override {
+        if (!modbusResponseReady) return false;
+        response = modbusResponse;
+        modbusResponseReady = false;
+        modbusPending = false;
+        return true;
+    }
+    void cancelModbus() override { modbusPending = false; modbusResponseReady = false; }
+    core::Result startEbusCommand(std::string_view, uint16_t port,
+                                  std::string_view command) override {
+        if (ebusPending || port == 0) return {core::ErrorCode::ResourceConflict, "ebus.busy"};
+        ebusCommand.assign(command);
+        ebusPending = true;
+        return {};
+    }
+    bool pollEbusResponse(peripherals::EbusResponse &response) override {
+        if (!ebusResponseReady) return false;
+        response = ebusResponse;
+        ebusResponseReady = false;
+        ebusPending = false;
+        return true;
+    }
+    void cancelEbusCommand() override { ebusPending = false; ebusResponseReady = false; }
     void push(uint8_t port, std::string_view bytes) {
         for (unsigned char byte : bytes) serial[port - 1].push_back(byte);
     }
@@ -96,9 +132,10 @@ void testLifecycleAndRegistry() {
     assert(hardware.listens == 0);
     assert(property(transport, 1).quality == core::Quality::Disabled);
     assert(std::get<bool>(property(transport, 0).value));
-    for (const auto &trigger : std::array<core::TriggerDescriptor, 4>{{
+    for (const auto &trigger : std::array<core::TriggerDescriptor, 5>{{
              transport.triggers().data[0], transport.triggers().data[1],
-             transport.triggers().data[2], transport.triggers().data[3]}}) {
+             transport.triggers().data[2], transport.triggers().data[3],
+             transport.triggers().data[4]}}) {
         assert(registry.findTrigger(trigger.id));
         assert(registry.findProperty(trigger.propertyId));
     }
@@ -136,6 +173,140 @@ void testLifecycleAndRegistry() {
     registry.stop();
     assert(property(transport, 0).quality == core::Quality::Unavailable);
     assert(registry.begin(10).ok() && count(transport, 0) == 0);
+}
+
+void testModbusQueueAndResults() {
+    FakeTransport hardware;
+    peripherals::Transport transport(hardware);
+    peripherals::TransportConfig config;
+    config.serial2Protocol = peripherals::Transport::modbusRtuProtocol;
+    assert(transport.configure(config, 0).ok());
+    core::PeripheralRegistry registry;
+    assert(registry.add({&transport, &transport, &transport, &transport}).ok());
+    assert(registry.begin(0).ok());
+    assert(sendSerial(transport, 2, "raw\n").result.code == core::ErrorCode::Unavailable);
+
+    const std::array<core::Parameter, 4> readArgs{{
+        {"port", uint32_t{2}}, {"unit", uint32_t{7}},
+        {"address", uint32_t{300}}, {"count", uint32_t{2}},
+    }};
+    const auto accepted = registry.execute("transport.main/modbus/read-holding", readArgs);
+    assert(accepted.result.ok() && accepted.applied && !accepted.confirmed);
+    assert(hardware.modbusPending && hardware.modbusRequest.port == 2 &&
+           hardware.modbusRequest.unitId == 7 && hardware.modbusRequest.address == 300 &&
+           hardware.modbusRequest.count == 2 &&
+           hardware.modbusRequest.operation == peripherals::ModbusOperation::ReadHolding);
+    assert(registry.execute("transport.main/modbus/read-holding", readArgs).result.code ==
+           core::ErrorCode::ResourceConflict);
+    assert(registry.validateAction("transport.main/modbus/read-holding", readArgs).ok());
+    assert(registry.validateAction("transport.main/modbus/read-input", readArgs).ok());
+        auto invalidCount = readArgs;
+        invalidCount[3].value = uint32_t{17};
+        assert(registry.validateAction("transport.main/modbus/read-holding", invalidCount).code ==
+            core::ErrorCode::InvalidArgument);
+
+    hardware.modbusResponse.port = 2;
+    hardware.modbusResponse.result = {};
+    hardware.modbusResponse.count = 2;
+    hardware.modbusResponse.values[0] = 421;
+    hardware.modbusResponse.values[1] = 422;
+    hardware.modbusResponseReady = true;
+    assert(registry.tick(25).ok());
+    assert(std::get<uint32_t>(property(transport, 7).value) == 1);
+    assert(std::get<uint32_t>(property(transport, 8).value) == 421);
+    assert(std::get<bool>(property(transport, 9).value));
+    assert(property(transport, 8).quality == core::Quality::Valid);
+
+    const std::array<core::Parameter, 4> writeArgs{{
+        {"port", uint32_t{2}}, {"unit", uint32_t{7}},
+        {"address", uint32_t{300}}, {"value", uint32_t{1234}},
+    }};
+    assert(registry.execute("transport.main/modbus/write-holding", writeArgs).applied);
+    assert(hardware.modbusRequest.operation == peripherals::ModbusOperation::WriteHolding &&
+           hardware.modbusRequest.value == 1234);
+        hardware.modbusResponse = {};
+        hardware.modbusResponse.port = 2;
+        hardware.modbusResponse.result = {};
+        hardware.modbusResponseReady = true;
+        assert(registry.tick(26).ok());
+    const std::array<core::Parameter, 4> coilArgs{{
+        {"port", uint32_t{2}}, {"unit", uint32_t{7}},
+        {"address", uint32_t{12}}, {"on", true},
+    }};
+    assert(registry.execute("transport.main/modbus/write-coil", coilArgs).applied);
+    assert(hardware.modbusRequest.operation == peripherals::ModbusOperation::WriteCoil &&
+           hardware.modbusRequest.value == 1);
+}
+
+void testEbusCommandAndIftttProperties() {
+    FakeTransport hardware;
+    peripherals::Transport transport(hardware);
+    peripherals::TransportConfig config;
+    assert(transport.configure(config, 0).ok());
+    core::PeripheralRegistry registry;
+    assert(registry.add({&transport, &transport, &transport, &transport}).ok());
+    assert(registry.begin(0).ok());
+
+    const std::array<core::Parameter, 5> readArgs{{
+        {"host", std::string_view{"192.168.1.50"}}, {"port", uint32_t{8888}},
+        {"circuit", std::string_view{"bai"}}, {"name", std::string_view{"FlowTemp"}},
+        {"field", std::string_view{"value"}},
+    }};
+    const auto accepted = registry.execute("transport.main/ebus/read", readArgs);
+    assert(accepted.result.ok() && accepted.applied && !accepted.confirmed);
+    assert(hardware.ebusPending && hardware.ebusCommand == "read -f -n -c bai FlowTemp value");
+    assert(registry.execute("transport.main/ebus/read", readArgs).result.code ==
+           core::ErrorCode::ResourceConflict);
+    assert(registry.validateAction("transport.main/ebus/read", readArgs).ok());
+    const std::array<core::Parameter, 5> unsafeRead{{
+        {"host", std::string_view{"192.168.1.50"}}, {"port", uint32_t{8888}},
+        {"circuit", std::string_view{"bai;quit"}}, {"name", std::string_view{"FlowTemp"}},
+        {"field", std::string_view{"value"}},
+    }};
+    assert(!registry.validateAction("transport.main/ebus/read", unsafeRead).ok());
+
+    const char numericReply[] = "42.5\n";
+    hardware.ebusResponse.result = {};
+    hardware.ebusResponse.connected = true;
+    hardware.ebusResponse.size = sizeof(numericReply) - 1;
+    std::memcpy(hardware.ebusResponse.text.data(), numericReply, hardware.ebusResponse.size);
+    hardware.ebusResponseReady = true;
+    assert(registry.tick(25).ok());
+    assert(std::get<uint32_t>(property(transport, 10).value) == 1);
+    assert(std::get<double>(property(transport, 11).value) == 42.5);
+    assert(std::get<std::string_view>(property(transport, 12).value) == "42.5\n");
+    assert(std::get<bool>(property(transport, 13).value));
+    assert(property(transport, 11).quality == core::Quality::Valid);
+
+    const std::array<core::Parameter, 5> writeArgs{{
+        {"host", std::string_view{"192.168.1.50"}}, {"port", uint32_t{8888}},
+        {"circuit", std::string_view{"bai"}}, {"name", std::string_view{"FlowTempDesired"}},
+        {"value", std::string_view{"45"}},
+    }};
+    assert(registry.validateAction("transport.main/ebus/write", writeArgs).code ==
+           core::ErrorCode::Unavailable);
+    config.ebusWritesEnabled = true;
+    assert(transport.configure(config, 26).ok());
+    assert(registry.execute("transport.main/ebus/write", writeArgs).applied);
+    assert(hardware.ebusCommand == "write -c bai FlowTempDesired 45");
+    const char writeReply[] = "done\n";
+    hardware.ebusResponse.size = sizeof(writeReply) - 1;
+    std::memcpy(hardware.ebusResponse.text.data(), writeReply, hardware.ebusResponse.size);
+    hardware.ebusResponseReady = true;
+    assert(registry.tick(50).ok());
+    assert(std::get<uint32_t>(property(transport, 10).value) == 1);
+
+    assert(registry.execute("transport.main/ebus/read", readArgs).applied);
+    hardware.ebusResponse.result = {core::ErrorCode::OperationFailed, "ebus.command"};
+    hardware.ebusResponse.connected = false;
+    const char errorReply[] = "ERR: unknown message\n";
+    hardware.ebusResponse.size = sizeof(errorReply) - 1;
+    std::memcpy(hardware.ebusResponse.text.data(), errorReply, hardware.ebusResponse.size);
+    hardware.ebusResponseReady = true;
+    assert(!registry.tick(75).ok());
+    assert(std::get<uint32_t>(property(transport, 10).value) == 2);
+    assert(!std::get<bool>(property(transport, 13).value));
+    assert(property(transport, 11).quality == core::Quality::Error);
 }
 
 void testFramesAndErrors() {
@@ -291,6 +462,8 @@ void runTransportTests() {
     testLifecycleAndRegistry();
     testFramesAndErrors();
     testValidationAndOwnership();
+    testModbusQueueAndResults();
+    testEbusCommandAndIftttProperties();
     testRegistryValidationHook();
     std::cout << "Transport tests passed\n";
 }

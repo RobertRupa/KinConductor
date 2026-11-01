@@ -60,6 +60,19 @@ struct CapturedRf24Packet {
 };
 #endif
 
+uint32_t serialFrameConfig(uint8_t dataBits, uint8_t parity, uint8_t stopBits) {
+    static constexpr uint32_t formats[4][3][2] = {
+        {{SERIAL_5N1, SERIAL_5N2}, {SERIAL_5E1, SERIAL_5E2}, {SERIAL_5O1, SERIAL_5O2}},
+        {{SERIAL_6N1, SERIAL_6N2}, {SERIAL_6E1, SERIAL_6E2}, {SERIAL_6O1, SERIAL_6O2}},
+        {{SERIAL_7N1, SERIAL_7N2}, {SERIAL_7E1, SERIAL_7E2}, {SERIAL_7O1, SERIAL_7O2}},
+        {{SERIAL_8N1, SERIAL_8N2}, {SERIAL_8E1, SERIAL_8E2}, {SERIAL_8O1, SERIAL_8O2}},
+    };
+    return dataBits >= 5 && dataBits <= 8 && parity <= 2 &&
+                   stopBits >= 1 && stopBits <= 2
+        ? formats[dataBits - 5][parity][stopBits - 1]
+        : SERIAL_8N1;
+}
+
 struct DeviceLogEvent {
     uint32_t timestampMs = 0;
     char message[88] = {};
@@ -771,18 +784,19 @@ void initializePeripherals() {
     initializeRelays();
     initializeInputs();
 
-#if defined(USE_GPS)
-    Serial1.begin(9600, SERIAL_8N1, kc868a6::gpio::rs232Rx,
-                  kc868a6::gpio::rs232Tx);
-#elif defined(USE_ZIGBEE_THREAD_COPROCESSOR)
-    Serial1.begin(115200, SERIAL_8N1, kc868a6::gpio::rs232Rx,
-                  kc868a6::gpio::rs232Tx);
-#else
-    Serial1.begin(9600, SERIAL_8N1, kc868a6::gpio::rs232Rx,
-                  kc868a6::gpio::rs232Tx);
-#endif
-    Serial2.begin(9600, SERIAL_8N1, kc868a6::gpio::rs485Rx,
-                  kc868a6::gpio::rs485Tx);
+    const auto &settings = webUi.settings();
+    const uint8_t uart1Rx = kc868a6::gpio::rs232Rx;
+    const uint8_t uart1Tx = kc868a6::gpio::rs232Tx;
+    const uint8_t uart2Rx = settings.serial2Route == 1
+        ? kc868a6::board::p17HostRx : kc868a6::gpio::rs485Rx;
+    const uint8_t uart2Tx = settings.serial2Route == 1
+        ? kc868a6::board::p17HostTx : kc868a6::gpio::rs485Tx;
+    Serial1.begin(settings.uart1Baud,
+                  serialFrameConfig(settings.serial1DataBits, settings.serial1Parity,
+                                    settings.serial1StopBits), uart1Rx, uart1Tx);
+    Serial2.begin(settings.rs485Baud,
+                  serialFrameConfig(settings.serial2DataBits, settings.serial2Parity,
+                                    settings.serial2StopBits), uart2Rx, uart2Tx);
 
     const auto registered = peripheralRegistry.add(
         {&analogInputs, &analogInputs, &analogInputs, nullptr});
@@ -794,6 +808,13 @@ void initializePeripherals() {
     reportCoreError(peripheralRegistry.add({&transport, &transport, &transport, &transport}));
     reportCoreError(peripheralRegistry.add({&currentInputs, &currentInputs, &currentInputs, nullptr}));
     reportCoreError(peripheralRegistry.add({&udpRules, &udpRules, &udpRules, nullptr}));
+    kc868a6::peripherals::TransportConfig transportConfig;
+    transportConfig.udpListenPort = settings.udpListenPort;
+    transportConfig.serial1Reserved = settings.uart1Mode != 0;
+    transportConfig.serial1Protocol = settings.serial1Protocol;
+    transportConfig.serial2Protocol = settings.serial2Protocol;
+    transportConfig.ebusWritesEnabled = settings.ebusWritesEnabled;
+    reportCoreError(transport.configure(transportConfig, millis()));
     if (registered.ok()) reportCoreError(peripheralRegistry.begin(millis()));
 
     pinMode(kc868a6::gpio::sensor1, INPUT);
@@ -837,14 +858,24 @@ void applyDeviceSettings(const DeviceSettings &settings) {
                 String(settings.gpio33SensorType) + ".");
     Wire.setClock(settings.i2cClockHz);
     Serial1.end();
-    Serial1.begin(settings.uart1Baud, SERIAL_8N1,
+    Serial1.begin(settings.uart1Baud,
+                  serialFrameConfig(settings.serial1DataBits, settings.serial1Parity,
+                                    settings.serial1StopBits),
                   kc868a6::gpio::rs232Rx, kc868a6::gpio::rs232Tx);
     Serial2.end();
-    Serial2.begin(settings.rs485Baud, SERIAL_8N1,
-                  kc868a6::gpio::rs485Rx, kc868a6::gpio::rs485Tx);
+    const uint8_t uart2Rx = settings.serial2Route == 1
+        ? kc868a6::board::p17HostRx : kc868a6::gpio::rs485Rx;
+    const uint8_t uart2Tx = settings.serial2Route == 1
+        ? kc868a6::board::p17HostTx : kc868a6::gpio::rs485Tx;
+    Serial2.begin(settings.rs485Baud,
+                  serialFrameConfig(settings.serial2DataBits, settings.serial2Parity,
+                                    settings.serial2StopBits), uart2Rx, uart2Tx);
     kc868a6::peripherals::TransportConfig transportConfig;
     transportConfig.udpListenPort = settings.udpListenPort;
     transportConfig.serial1Reserved = settings.uart1Mode != 0;
+    transportConfig.serial1Protocol = settings.serial1Protocol;
+    transportConfig.serial2Protocol = settings.serial2Protocol;
+    transportConfig.ebusWritesEnabled = settings.ebusWritesEnabled;
     reportCoreError(transport.configure(transportConfig, millis()));
     reportCoreError(blePresence.setTimeoutMs(settings.blePresenceTimeoutSeconds * 1000UL));
 

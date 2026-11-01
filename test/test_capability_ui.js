@@ -128,13 +128,15 @@ test("hostname HTML pattern escapes the hyphen for browser Unicode sets", () => 
 });
 test("settings fields are categorized once, in stable functional order", () => {
   const { api } = harness();
-  const fields = ["udpListenPort", "uart1Mode", "i2cClockHz", "blePresenceTimeoutSeconds",
+  const fields = ["udpListenPort", "uart1Mode", "serial1Protocol", "serial2Route",
+    "ebusWritesEnabled", "i2cClockHz", "blePresenceTimeoutSeconds",
     "bluetoothMode", "gpio32SensorType", "sensorIntervalMs", "temperature1Enabled",
     "fanPin", "beeperFrequencyHz", "s2InputEnabled", "displayMode"].map((id) => ({ id }));
   const groups = api.groupedSettings(fields);
   assert.equal(groups.map((group) => group.id).join(","), "interfaces,bluetooth,sensors,outputs,inputs,screen");
   assert.equal(groups.flatMap((group) => group.fields).length, fields.length);
   assert.equal(new Set(groups.flatMap((group) => group.fields.map((field) => field.id))).size, fields.length);
+  assert.ok(groups.find((group) => group.id === "interfaces").fields.some((field) => field.id === "ebusWritesEnabled"));
 });
 test("UDP trigger configuration belongs to the IFTTT form, not the header", () => {
   const html = fs.readFileSync("data/index.html", "utf8");
@@ -205,6 +207,35 @@ test("settings controls preserve full numeric ranges and render named mode choic
   ] });
   const select = api.settingsInput({ id: "gpio32SensorType", type: "unsigned", minimum: 0, maximum: 3, allowedValues: [] });
   assert.deepEqual(select.children.map(option => option.textContent), ["Off", "DS18B20", "DHT22", "DHT11"]);
+  const protocol = api.settingsInput({ id: "serial2Protocol", type: "unsigned", minimum: 0,
+    maximum: 1, allowedValues: [0, 1] });
+  assert.deepEqual(protocol.children.map(option => option.textContent), ["Raw serial", "Modbus RTU"]);
+  const route = api.settingsInput({ id: "serial2Route", type: "unsigned", minimum: 0,
+    maximum: 1, allowedValues: [0, 1] });
+  assert.deepEqual(route.children.map(option => option.textContent), [
+    "RS-485 · GPIO14/27", "P17 TTL · GPIO12/13"
+  ]);
+});
+test("eBUS capability actions use named fields and a bounded target", () => {
+  const { api } = harness();
+  const action = { id: "transport.main/ebus/read", parameters: [
+    { id: "host", type: "text", required: true },
+    { id: "port", type: "unsigned", required: true, minimum: 1, maximum: 65535 },
+    { id: "circuit", type: "text", required: true },
+    { id: "name", type: "text", required: true },
+    { id: "field", type: "text", required: true }
+  ] };
+  const controls = new Map([
+    ["host", { value: "192.168.1.50" }], ["port", { value: "8888" }],
+    ["circuit", { value: "bai" }], ["name", { value: "FlowTemp" }],
+    ["field", { value: "value" }]
+  ]);
+  const command = api.commandFrom(action, controls);
+  assert.equal(command.id, "transport.main/ebus/read");
+  assert.equal(command.parameters.port, 8888);
+  assert.equal(command.parameters.name, "FlowTemp");
+  controls.get("host").value = "bad host";
+  assert.throws(() => api.commandFrom(action, controls), /Invalid parameter: host/);
 });
 test("UDP and serial data fields support newlines with exact UTF-8 byte limits", () => {
   const { api } = harness();

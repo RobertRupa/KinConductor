@@ -36,6 +36,16 @@ struct DeviceSettings {
     uint16_t fanFrequencyHz = 1000;
     uint16_t udpListenPort = 0;
     uint16_t blePresenceTimeoutSeconds = 60;
+    uint8_t serial1Protocol = 0;
+    uint8_t serial2Protocol = 0;
+    uint8_t serial1DataBits = 8;
+    uint8_t serial2DataBits = 8;
+    uint8_t serial1Parity = 0;
+    uint8_t serial2Parity = 0;
+    uint8_t serial1StopBits = 1;
+    uint8_t serial2StopBits = 1;
+    uint8_t serial2Route = 0;
+    bool ebusWritesEnabled = false;
 };
 
 namespace kc868a6::config {

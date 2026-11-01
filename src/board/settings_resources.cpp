@@ -31,9 +31,17 @@ core::Result planResources(const DeviceSettings &settings, BoardOptions options,
     };
     uart(0, gpio::usbSerialTx, gpio::usbSerialRx, "usb");
     if (options.rs232) uart(1, gpio::rs232Tx, gpio::rs232Rx, "rs232");
-    if (options.rs485) uart(2, gpio::rs485Tx, gpio::rs485Rx, "rs485");
+    const bool serial2UsesP17 = settings.serial2Route == 1;
+    if (options.rs485 && !serial2UsesP17) {
+        uart(2, gpio::rs485Tx, gpio::rs485Rx, "rs485");
+    }
     if (options.p17 != P17Uart::Disabled) {
-        uart(options.p17 == P17Uart::Uart1 ? 1 : 2, p17HostTx, p17HostRx, "p17");
+        if (!(options.p17 == P17Uart::Uart2 && serial2UsesP17)) {
+            uart(options.p17 == P17Uart::Uart1 ? 1 : 2, p17HostTx, p17HostRx, "p17");
+        }
+    }
+    if (serial2UsesP17) {
+        uart(2, p17HostTx, p17HostRx, "p17");
     }
     add(ResourceKind::Gpio, gpio::i2cSda, "i2c", PinUse::Output);
     add(ResourceKind::Gpio, gpio::i2cScl, "i2c", PinUse::Output);
