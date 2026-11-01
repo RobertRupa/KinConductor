@@ -9,7 +9,7 @@ version tags and to build/package every configured PlatformIO profile in an
 independent job. The A4/A8/A8S/A16/A32/A64/A128 aliases remain A6-baseline
 builds, not electrically validated profiles for those boards.
 
-The working tree prepares **1.1.6** with a single factory application
+The working tree prepares **1.1.7** with a single factory application
 partition and a larger LittleFS partition. There is no firmware OTA updater or
 rollback slot. The partition migration keeps NVS at offset `0x9000`, size
 `0x5000`, but moves LittleFS; it has not been physically tested on a board.
@@ -29,7 +29,7 @@ npm run build:all
 npm test
 npm run build:fs:all
 for profile in kc868-a6-base kc868-a6 kc868-a4 kc868-a8 kc868-a8s kc868-a16 kc868-a32 kc868-a64 kc868-a128 kc868-a6-coprocessor; do
-  npm run package:release -- "$profile" v1.1.6
+  npm run package:release -- "$profile" v1.1.7
 done
 ```
 
@@ -38,7 +38,7 @@ Run builds sequentially with tests: dependency-resolution changes may replace
 only with the coprocessor profile, use
 `PIO_ENV=kc868-a6-coprocessor npm test`.
 
-Outputs are under ignored `dist/releases/v1.1.6/<profile>/`:
+Outputs are under ignored `dist/releases/v1.1.7/<profile>/`:
 
 | Image | Purpose / serial offset |
 | --- | --- |
@@ -97,7 +97,7 @@ For a future authorized publication from your own environment:
 
 ```sh
 git remote add origin https://github.com/RobertRupa/KinConductor.git
-git push --atomic origin HEAD v1.1.6
+git push --atomic origin HEAD v1.1.7
 ```
 
 Create the repository and verify its licensing/contents before those commands;
@@ -106,6 +106,7 @@ Inspect both build jobs and the release job in Actions, then download the
 archives and verify `sha256sum -c SHA256SUMS` inside each extracted profile.
 The tag-triggered run, not a local compile, is the GitHub build acceptance test.
 
-**Publication status:** a pushed `v1.1.6` tag triggers the ten-profile GitHub
-Actions workflow. Claim publication only after all build, test, LittleFS and
-release jobs succeed; local success does not establish remote CI or publication.
+**Publication status:** `v1.1.6` is published. A pushed `v1.1.7` tag triggers
+the ten-profile GitHub Actions workflow. Claim publication only after all
+build, test, LittleFS and release jobs succeed; local success does not establish
+remote CI or publication.

@@ -1,6 +1,6 @@
 {
   "name": "kinconductor",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "description": "KinConductor KC868-Ax ESP32 firmware with typed serial profiles, Modbus RTU, eBUS TCP, BLE presence, IFTTT capabilities, calibrated inputs, PWM and OLED grids",
   "private": true,
   "directories": {

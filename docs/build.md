@@ -18,7 +18,7 @@ Select the serial upload port in the PlatformIO toolbar or add
 `upload_port = /dev/ttyUSB0` to `platformio.ini` for your system.
 Use the matching `-e` environment when uploading a feature-specific build.
 
-## Version 1.1.6 working tree: serial profiles and boiler interface
+## Version 1.1.7 working tree: serial profiles and boiler interface
 
 The repository has no firmware OTA updater; the former second application slot
 was unused. The partition table now has one **2.25 MiB** factory application

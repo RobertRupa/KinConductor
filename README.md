@@ -67,7 +67,7 @@ profile archives to GitHub Releases after every job passes. The A4/A8/A8S/A16/
 A32/A64/A128 aliases reuse the A6 baseline pin map and are not electrically
 validated for those boards. Version **1.1.4** updates this release workflow.
 
-The working tree prepares **1.1.6** with one 2.25 MiB factory application
+The working tree prepares **1.1.7** with one 2.25 MiB factory application
 partition and 1.625 MiB LittleFS instead of the unused second OTA slot. This
 firmware has no OTA update or rollback path; updates are serial-only. Migration
 from the previous partition layout requires uploading the firmware/partition
