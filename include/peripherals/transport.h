@@ -4,6 +4,31 @@
 
 namespace kc868a6::peripherals {
 
+enum class ModbusOperation : uint8_t { ReadHolding, ReadInput, WriteHolding, WriteCoil };
+
+struct ModbusRequest {
+    uint8_t port = 0;
+    uint8_t unitId = 0;
+    ModbusOperation operation = ModbusOperation::ReadHolding;
+    uint16_t address = 0;
+    uint16_t count = 0;
+    uint16_t value = 0;
+};
+
+struct ModbusResponse {
+    uint8_t port = 0;
+    core::Result result{};
+    std::array<uint16_t, 16> values{};
+    uint16_t count = 0;
+};
+
+struct EbusResponse {
+    core::Result result{};
+    std::array<char, 257> text{};
+    size_t size = 0;
+    bool connected = false;
+};
+
 // All reads are nonblocking. A UDP read consumes one whole datagram, including
 // on CapacityExceeded; serialRead returns -1 when no byte is immediately ready.
 class ITransportHardware {
@@ -18,6 +43,17 @@ public:
                                        std::string_view data) = 0;
     virtual core::Result serialRead(uint8_t port, int &byte) = 0;
     virtual core::ActionResult serialSend(uint8_t port, std::string_view data) = 0;
+    virtual core::Result startModbus(const ModbusRequest &) {
+        return {core::ErrorCode::Unavailable, "modbus.unsupported"};
+    }
+    virtual void modbusTask() {}
+    virtual bool pollModbus(ModbusResponse &) { return false; }
+    virtual void cancelModbus() {}
+    virtual core::Result startEbusCommand(std::string_view, uint16_t, std::string_view) {
+        return {core::ErrorCode::Unavailable, "ebus.unsupported"};
+    }
+    virtual bool pollEbusResponse(EbusResponse &) { return false; }
+    virtual void cancelEbusCommand() {}
 };
 
 struct TransportConfig {
@@ -27,6 +63,9 @@ struct TransportConfig {
     bool serial2Enabled = true;
     // Parent must set this for BOTH GPS and coprocessor UART1 modes.
     bool serial1Reserved = false;
+    uint8_t serial1Protocol = 0;
+    uint8_t serial2Protocol = 0;
+    bool ebusWritesEnabled = false;
     uint32_t serialIdleMs = 25;
 };
 
@@ -38,6 +77,10 @@ public:
     static constexpr size_t maxPayloadBytes = 256;
     static constexpr size_t maxHostBytes = 253;
     static constexpr size_t serialReadBudget = 512;
+    static constexpr size_t maxEbusResponseBytes = 256;
+    static constexpr size_t maxEbusCommandBytes = 192;
+    static constexpr uint8_t rawSerialProtocol = 0;
+    static constexpr uint8_t modbusRtuProtocol = 1;
 
     explicit Transport(ITransportHardware &hardware) : hardware_(hardware) {}
     Transport(const Transport &) = delete;
@@ -76,6 +119,7 @@ private:
     bool serialEnabled(uint8_t port) const;
     void refreshAvailability(uint32_t nowMs);
     void receiverError(size_t receiver, core::ErrorCode error, uint32_t nowMs);
+    void completeEbus(const EbusResponse &response, uint32_t nowMs);
     core::Result accept(size_t receiver, std::string_view text, uint32_t nowMs);
     core::Result pollSerial(uint8_t port, uint32_t nowMs);
     core::Result finishSerial(uint8_t port, uint32_t nowMs);
@@ -83,10 +127,13 @@ private:
     ITransportHardware &hardware_;
     TransportConfig config_{};
     std::array<Receiver, 3> receivers_{};
-    std::array<core::PropertySnapshot, 7> snapshots_{};
+    std::array<core::PropertySnapshot, 14> snapshots_{};
+    std::array<char, maxEbusResponseBytes + 1> ebusResponse_{};
     core::Health health_{};
     bool started_ = false;
     bool listening_ = false;
+    bool modbusPending_ = false;
+    bool ebusPending_ = false;
 };
 
 }  // namespace kc868a6::peripherals

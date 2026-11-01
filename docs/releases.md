@@ -9,10 +9,14 @@ version tags and to build/package every configured PlatformIO profile in an
 independent job. The A4/A8/A8S/A16/A32/A64/A128 aliases remain A6-baseline
 builds, not electrically validated profiles for those boards.
 
-The working tree prepares **1.1.5** with a single factory application
+The working tree prepares **1.1.7** with a single factory application
 partition and a larger LittleFS partition. There is no firmware OTA updater or
 rollback slot. The partition migration keeps NVS at offset `0x9000`, size
 `0x5000`, but moves LittleFS; it has not been physically tested on a board.
+Version 1.1.6 adds configurable UART framing, Modbus RTU client actions and
+named eBUS TCP actions through `ebusd` port 8888. UART2 P17 and all eBUS/Modbus
+connections still require physical electrical/protocol validation; no board
+upload is implied by these local build results.
 
 Version 1.1.0 pins PlatformIO Core 6.2.0 in CI, the official pioarduino
 `55.03.312-1` platform release (Arduino ESP32 3.3.12 / IDF 5.5.5),
@@ -25,7 +29,7 @@ npm run build:all
 npm test
 npm run build:fs:all
 for profile in kc868-a6-base kc868-a6 kc868-a4 kc868-a8 kc868-a8s kc868-a16 kc868-a32 kc868-a64 kc868-a128 kc868-a6-coprocessor; do
-  npm run package:release -- "$profile" v1.1.5
+  npm run package:release -- "$profile" v1.1.7
 done
 ```
 
@@ -34,7 +38,7 @@ Run builds sequentially with tests: dependency-resolution changes may replace
 only with the coprocessor profile, use
 `PIO_ENV=kc868-a6-coprocessor npm test`.
 
-Outputs are under ignored `dist/releases/v1.1.5/<profile>/`:
+Outputs are under ignored `dist/releases/v1.1.7/<profile>/`:
 
 | Image | Purpose / serial offset |
 | --- | --- |
@@ -93,7 +97,7 @@ For a future authorized publication from your own environment:
 
 ```sh
 git remote add origin https://github.com/RobertRupa/KinConductor.git
-git push --atomic origin HEAD v1.1.5
+git push --atomic origin HEAD v1.1.7
 ```
 
 Create the repository and verify its licensing/contents before those commands;
@@ -102,7 +106,7 @@ Inspect both build jobs and the release job in Actions, then download the
 archives and verify `sha256sum -c SHA256SUMS` inside each extracted profile.
 The tag-triggered run, not a local compile, is the GitHub build acceptance test.
 
-**Publication status:** `v1.1.4` is the latest published tag. Version `1.1.5`
-is being prepared locally; its builds, tests and packages must pass before that
-tag is pushed. GitHub Actions publishes the release only after all ten profile
-jobs succeed.
+**Publication status:** `v1.1.6` is published. A pushed `v1.1.7` tag triggers
+the ten-profile GitHub Actions workflow. Claim publication only after all
+build, test, LittleFS and release jobs succeed; local success does not establish
+remote CI or publication.

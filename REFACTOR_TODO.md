@@ -2360,3 +2360,42 @@ po zatwierdzeniu roli; custom bridge i standardowy RCP/NCP nie są zamienne.
 Rozdział 21 korzysta z dokumentacji ESP32 UART i H2/C5/C6 wymienionej
 w rozdziale 20.2. Informacje o złączu P17 pochodzą z uściślenia użytkownika;
 nie stanowią nowego pomiaru PCB ani zatwierdzenia zasilania/poziomów.
+
+## 22. Profile UART, Modbus RTU i Vaillant eBUS — 2026-11-01
+
+Zakres rozpoczęty na branchu `feature/serial-protocols-ebus-modbus` dla
+Vaillant VU/VUW PL 200/3-5. Hostowa ścieżka eBUS wybrana z użytkownikiem to
+TCP do command server `ebusd` (port 8888), nie direct enhanced serial do
+adaptera v6. Adapter v6 port 9999 i `micro-ebusd` HTTP pozostają odrębnymi
+interfejsami. P17 ma obsługiwać Modbus RTU/raw serial, nie eBUS.
+
+Zaimplementowano i zweryfikowano lokalnie:
+
+- rekord ustawień v3 z bezpieczną migracją v1/v2, profilem raw/Modbus RTU,
+  baudem, 5–8 bitami danych, parity, 1/2 stopami i trasą UART2 RS-485/P17;
+- walidację rezerwacji P17/PN532/GPIO12 oraz blokadę Modbus na UART1 GPS/
+  coprocessor;
+- asynchroniczny Modbus RTU client na obu UART-ach z read holding/input,
+  write holding/coil, limitem 16 rejestrów i capability snapshots/IFTTT;
+- bounded TCP client dla named `ebusd read`/`write`, odpowiedzi do 256 B,
+  queue status, quality, IFTTT sequence/value oraz domyślną blokadę write;
+- formularze Settings i typed capability action fields z walidacją hosta,
+  tokenów i zakresów; direct/raw eBUS command jest niewystawiony.
+
+Pozostałe kryteria akceptacji:
+
+- odczytać z instalacji `ebusd scan`/`info` i potwierdzić dokładny produkt,
+  HW/SW oraz właściwy wariant definicji dla VU/VUW PL 200/3-5;
+- sprawdzić komunikację z fizycznym Adapter v6 i hostem `ebusd`, jego ACL,
+  timeouty, odzyskiwanie po utracie Wi-Fi oraz rzeczywiste czasy `connect`;
+- sprawdzić Modbus z urządzeniem docelowym, framingiem i wymaganą kontrolą
+  kierunku transceivera RS-485; osobno sprawdzić poziomy/boot zachowanie P17;
+- zmierzyć peak heap i loop latency przy maksymalnym capabilities JSON,
+  aktywnym BLE i równoczesnych requestach; native test nie dowodzi heapu A6;
+- zweryfikować named eBUS writes oraz zakresy na rzeczywistym kotle przed
+  włączeniem `ebusWritesEnabled`. Writes domyślnie pozostają wyłączone.
+
+Brak fizycznego uploadu/testu nie jest PASS. Obecna implementacja nie ma
+bezpośredniego eBUS po UART, Modbus TCP, automatycznego cyklicznego pollingu
+kotła ani ebusd authentication. `ebus.last/value` aktualizuje się po jawnej
+akcji; nie udaje stale odświeżanej telemetrii.

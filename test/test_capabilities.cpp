@@ -205,7 +205,7 @@ void testCapabilityJson() {
     assert(!web::writeCapabilities(tiny.to<JsonObject>(), registry, 30).ok());
     document.clear();
     assert(config::writeSettingsSchema(document.to<JsonObject>()).ok());
-    assert(document["fields"].size() == 33);
+    assert(document["fields"].size() == 43);
     assert(document["fields"][9]["maximum"] == 5);
     assert(registry.add({&fan, &fan, &fan, &fan}).ok());
     peripherals::BleTargets targets;
@@ -228,6 +228,7 @@ void testCapabilityJson() {
     std::string json;
     serializeJson(document, json);
     assert(json.size() < web::capabilitiesJsonCapacity);
+    assert(document.memoryUsage() < web::capabilitiesJsonCapacity);
     document.clear();
     assert(!deserializeJson(document, R"({"id":"transport.main/serial/send","parameters":{"port":2,"data":"hello\u0000hidden"}})"));
     assert(!web::executeJsonAction(registry, document.as<JsonVariantConst>(), false).result.ok());

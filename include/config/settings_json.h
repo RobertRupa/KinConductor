@@ -6,7 +6,7 @@
 
 namespace kc868a6::config {
 
-constexpr uint32_t settingsRecordVersion = 2;
+constexpr uint32_t settingsRecordVersion = 3;
 constexpr size_t settingsJsonCapacity = 4096;
 
 core::Result readSettingsJson(JsonVariantConst source,

@@ -150,6 +150,29 @@ void testBoardConflictsAndAtomicPlan() {
     assert(board::planResources(settings, options, manager).ok());
 }
 
+void testRuntimeP17Route() {
+    DeviceSettings settings;
+    settings.serial2Route = 1;
+    board::BoardOptions options;
+    board::ResourceManager manager;
+    assert(board::planResources(settings, options, manager).code ==
+           core::ErrorCode::ResourceConflict);
+    settings.pn532Enabled = false;
+    assert(board::planResources(settings, options, manager).ok());
+    bool uart2Claimed = false;
+    bool rs485RxClaimed = false;
+    bool p17TxClaimed = false;
+    bool p17RxClaimed = false;
+    for (size_t index = 0; index < manager.claims().size; ++index) {
+        const auto &claim = manager.claims().data[index];
+        if (claim.kind == board::ResourceKind::Uart && claim.number == 2) uart2Claimed = true;
+        if (claim.kind == board::ResourceKind::Gpio && claim.number == gpio::rs485Rx) rs485RxClaimed = true;
+        if (claim.kind == board::ResourceKind::Gpio && claim.number == board::p17HostTx) p17TxClaimed = true;
+        if (claim.kind == board::ResourceKind::Gpio && claim.number == board::p17HostRx) p17RxClaimed = true;
+    }
+    assert(uart2Claimed && !rs485RxClaimed && p17TxClaimed && p17RxClaimed);
+}
+
 void testConfigValidationBeforeStorage() {
     Preferences::reset();
     config::PreferencesSettingsStore store;
@@ -208,7 +231,8 @@ void runBoardTests() {
     testCapacityAndDuplicateClaims();
     testExistingProfilesAndSharedBuses();
     testBoardConflictsAndAtomicPlan();
+    testRuntimeP17Route();
     testConfigValidationBeforeStorage();
     testDiagnosticJson();
-    std::cout << "PASS: 7 board test groups (pinout, resources, config validation, diagnostics)\n";
+    std::cout << "PASS: 8 board test groups (pinout, resources, config validation, diagnostics)\n";
 }

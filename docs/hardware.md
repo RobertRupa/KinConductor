@@ -79,21 +79,21 @@ may share the SPI bus with either radio.
 
 At startup, firmware scans I2C addresses `0x08` through `0x77` and reports
 detected addresses in the Interfaces page. GPIO12/13 are separate from the
-RS-232 UART on GPIO16/17, but firmware does not enable them as a TTL UART. They
-are 3.3 V pins; GPIO12 is a boot-strapping pin and GPIO13 is also the PN532 SPI
-chip-select. Do not connect TTL logic directly to RS-232 voltage levels.
+RS-232 UART on GPIO16/17. UART2 can be explicitly routed to P17 TTL from
+Settings; this replaces its RS-485 route. They are 3.3 V pins; GPIO12 is a
+boot-strapping pin and GPIO13 is also the PN532 SPI chip-select. The resource
+planner rejects this route while PN532 is enabled. Do not connect TTL logic
+directly to RS-232 voltage levels or assume the RS-485 terminals are TTL.
 
-The planned P17 coprocessor link uses host TX GPIO12 to peer RX and host RX
-GPIO13 to peer TX, with common ground and compatible logic levels. These
-pins are separate from the board's serial transceivers, but routing UART1
-or UART2 to P17 replaces that controller's RS-232 or RS-485 role. ESP32 has
-three UART controllers in total, including USB/log UART0. Baud rates such as
-460800 are possible with hardware UART, subject to peer and wiring tests.
-P17 RX GPIO13 cannot run alongside the current PN532 CS GPIO13 assignment.
-Verify boot-strapping behavior, connector orientation and the auxiliary
-3.3 V supply budget before connecting a peer. The current pin header uses
-legacy `ttlRx=12` / `ttlTx=13` names; the proposed reversed TX/RX assignment
-is documented for future implementation, not enabled by this documentation.
+For P17, connect host TX GPIO12 to peer RX and host RX GPIO13 to peer TX,
+with common ground and compatible logic levels. This runtime setting routes
+UART2 only, replacing the RS-485 role. ESP32 has three UART controllers in
+total, including USB/log UART0. Settings currently accepts UART baud rates up
+to 115200. P17 RX GPIO13 cannot run alongside PN532 CS GPIO13. Verify
+boot-strapping behavior, connector orientation and the auxiliary 3.3 V supply
+budget before connecting a peer. The current pin header uses
+legacy `ttlRx=12` / `ttlTx=13` names; the Settings route uses host TX GPIO12
+and host RX GPIO13. P17 has not been physically validated in this slice.
 
 The RF24 IFTTT action sends a 32-bit `uint32_t` payload at 1 Mbps on channel 76
 to pipe address `E8E8F0F0E1`. The receiving nRF24 device must use the same

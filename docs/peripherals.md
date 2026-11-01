@@ -75,7 +75,7 @@ transmission is available only in the
 
 The newer **IO** page uses registered capabilities for module readings and
 typed action forms. **Settings** generates all current application fields from
-the firmware schema. Native accordions organize the 33 fields into buses/UDP,
+the firmware schema. Native accordions organize the 43 fields into buses/UDP,
 Bluetooth, sensors, outputs, inputs and OLED; network identity has its own
 section. Expand a section to edit it; the application settings still save as
 one flat record. **Screen** edits pages and binds cells to registered ADC,
@@ -117,11 +117,75 @@ Generic send action examples:
 ```
 
 UART1 send/receive is blocked while its mode is GPS or coprocessor. UART2
-uses RS485, not raw 3.3 V UART pins. Text is bounded to 256 UTF-8 bytes;
+uses RS-485 by default, or P17 TTL when that route is explicitly selected.
+Text is bounded to 256 UTF-8 bytes;
 serial uses newline or 25 ms idle framing. No remote acknowledgement is implied.
 IO and IFTTT action data uses a multiline textarea with a 256-byte UTF-8
 limit; browser textareas normalize line breaks to LF. This is not a binary
 payload editor or a configurable CRLF encoder.
+
+### Serial profiles, Modbus RTU and Vaillant eBUS
+
+Each UART can select raw serial or **Modbus RTU** in Settings. Baud rate, data
+bits (5–8), parity (none/even/odd) and stop bits (1/2) are stored with the
+versioned settings record. A UART in Modbus mode does not also consume text
+frames or accept raw-serial send actions. UART1 remains unavailable to the
+transport while GPS or the coprocessor owns it.
+
+UART2 can use the board's RS-485 transceiver or route to **P17 TTL** (GPIO12
+TX, GPIO13 RX). P17 is 3.3 V logic, GPIO12 is a boot-strapping pin, and GPIO13
+is the PN532 SPI chip-select. The resource validator rejects P17 while PN532 is
+enabled. Selecting P17 replaces the RS-485 route; it does not electrically
+convert RS-485 A/B to TTL. Verify the PCB revision, connector direction and
+external transceiver requirements before wiring. P17 has not been physically
+validated in this software slice.
+
+Modbus RTU actions are available from IO, `/api/actions` and IFTTT when the
+selected UART is in Modbus mode: read holding/input registers (1–16 registers),
+write one holding register, or write one coil. Unit IDs are 1–247 and register
+addresses are zero-based. One transaction per transport is accepted at a time;
+its sequence, first returned register and last result quality are exposed as
+capabilities. This profile is a Modbus RTU client, not a server or Modbus TCP
+implementation.
+
+Example Modbus RTU read through UART2 (the UART must be configured for Modbus):
+
+```json
+{"id":"transport.main/modbus/read-holding","parameters":{"port":2,"unit":1,"address":0,"count":1}}
+```
+
+For the Vaillant **VU/VUW PL 200/3-5**, eBUS uses the chosen **TCP connection to
+the `ebusd` command server**, normally port 8888. The eBUS Adapter v6 itself
+uses its own enhanced host protocol on its adapter port (normally 9999); it is
+not the same protocol as the `ebusd` command server. Configure the adapter as
+an `ebusd` host device, then point KinConductor at the host running `ebusd`.
+The adapter's `micro-ebusd` HTTP API is not the selected transport here.
+KinConductor's named eBUS actions connect to the TCP client port on the host
+running `ebusd`; they do not connect to the adapter's enhanced port directly.
+The host and port are saved as parameters of the capability/IFTTT action.
+
+Example named read action:
+
+```json
+{"id":"transport.main/ebus/read","parameters":{"host":"192.168.1.20","port":8888,"circuit":"bai","name":"FlowTemp","field":"value"}}
+```
+
+Capability actions use named `read` and `write` commands only; raw hex and
+arbitrary command passthrough are not exposed. A single transaction is queued,
+responses are bounded to 256 bytes and read replies update
+`transport.main/ebus/last/value`, `/last/text` and `/sequence`. IFTTT can use
+the numeric value or sequence; it changes only after an eBUS action runs. eBUS
+writes are disabled by default and require enabling **Allow eBUS writes** in
+Settings. Only enable this after verifying the selected message and value range
+for the installed boiler. KinConductor does not implement ebusd authentication;
+limit port 8888 with the host's network firewall and ebusd ACL.
+
+`VU/VUW PL 200/3-5` is not enough to pick one universal message map. Use the
+`ebusd` `scan`/`info` output and the exact product, hardware and software IDs to
+confirm the matching Vaillant definitions installed on the `ebusd` host. The
+firmware does not assume every ecoTEC+ uses the same BAI messages or expose a
+hard-coded set of writable boiler settings. Serial eBUS through P17 is not
+implemented; the selected eBUS path is TCP to `ebusd`.
 
 PWM is disabled by default on **DA-2 / GPIO25**. Enable/configure it only for
 a suitable circuit or oscilloscope. The GPIO produces **3.3 V logic PWM**,

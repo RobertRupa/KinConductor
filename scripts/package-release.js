@@ -99,7 +99,7 @@ function packageRelease({ root, profile, version, commit, outputRoot }) {
     "Factory flashing can overwrite NVS padding. Use only for intentional provisioning, not routine updates.",
     "Never erase flash/NVS or flash a factory image to preserve existing credentials/calibration.",
     "littlefs.bin replaces the web-assets filesystem. Offsets and SHA256 hashes are in manifest.json.",
-    "P17/custom coprocessor protocols and automatic electrical calibration are not implemented.",
+    "UART2 can route to P17 TTL for raw serial/Modbus RTU; this route is not electrically validated. P17 custom coprocessor protocols and eBUS-over-serial are not implemented.",
     ""
   ].join("\n"));
   return { output, manifest };
