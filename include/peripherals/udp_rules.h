@@ -3,6 +3,9 @@
 #include "core/peripheral.h"
 
 namespace kc868a6::peripherals {
+inline constexpr size_t iftttRuleCapacity = 8;
+inline constexpr size_t iftttActionCapacity = 8;
+inline constexpr size_t udpRuleSocketCapacity = 4;
 struct UdpRuleConfig {
     bool enabled = false;
     uint16_t port = 0;
@@ -13,7 +16,7 @@ struct UdpRuleConfig {
     size_t textSize = 0;
     bool contains = false;
 };
-using UdpRulesConfig = std::array<UdpRuleConfig, 4>;
+using UdpRulesConfig = std::array<UdpRuleConfig, iftttRuleCapacity>;
 core::Result readUdpRule(JsonVariantConst source, UdpRuleConfig &destination);
 core::Result readUdpRules(JsonVariantConst rules, uint16_t globalPort, UdpRulesConfig &destination);
 bool matchesUdpRule(const UdpRuleConfig &config, const std::array<uint8_t, 4> &ip,
@@ -45,11 +48,11 @@ public:
 private:
     IUdpRulesHardware &hardware_;
     UdpRulesConfig config_{};
-    std::array<uint16_t, 4> ports_{};
-    std::array<bool, 4> opened_{};
-    std::array<uint8_t, 4> pending_{};
-    std::array<uint32_t, 4> counts_{};
-    std::array<core::PropertySnapshot, 4> snapshots_{};
+    std::array<uint16_t, udpRuleSocketCapacity> ports_{};
+    std::array<bool, udpRuleSocketCapacity> opened_{};
+    std::array<uint8_t, iftttRuleCapacity> pending_{};
+    std::array<uint32_t, iftttRuleCapacity> counts_{};
+    std::array<core::PropertySnapshot, iftttRuleCapacity> snapshots_{};
     core::Health health_{};
     bool started_ = false;
 };

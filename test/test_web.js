@@ -170,7 +170,7 @@ test("header reports actual hardware including absent PSRAM and clears unavailab
   assert.match(elements.get("#headerCpu").textContent, /ESP32.*2.*240 MHz.*C0 24%.*C1 57%/);
   assert.equal(elements.get("#headerPsram").textContent, "0");
   assert.match(elements.get("#headerRam").textContent, /64 KiB.*256 KiB heap/);
-  assert.match(elements.get("#headerFlash").textContent, /4 MiB.*71 KiB.*flashFreeOta.*FW/);
+  assert.match(elements.get("#headerFlash").textContent, /4 MiB.*71 KiB.*flashFreeApp.*FW/);
   assert.equal(elements.get("#headerModel").textContent, "KC868-A8");
   assert.equal(elements.get("#brandMark").textContent, "A8");
   assert.equal(document.title, "KinConductor | KC868-A8");

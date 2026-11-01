@@ -406,7 +406,16 @@
             <p class="field-hint" data-i18n="udpRuleHelp">Port jest przypisany do reguły, bind 0.0.0.0. Reguły z tym samym portem współdzielą odbiornik. Nie używaj globalnego portu UDP ani 5353 (mDNS). Maks. 256 bajtów UTF-8.</p>
           </fieldset>
           <label class="field-label" for="iftttAction" data-i18n="thenAction">Wtedy wykonaj</label>
-          <select id="iftttAction"><option value="relay" data-i18n="actionRelay">Steruj przekaźnikiem</option><option value="beeper" data-i18n="actionBeeper">Uruchom buzzer</option><option value="rf24Send" data-i18n="actionRf24" hidden disabled>Nadaj payload RF24</option><option value="rf24Saved" data-i18n="actionRf24Saved" hidden disabled>Odtwórz zapisany RF24</option><option value="oledPage" data-i18n="actionOled">Pokaż stronę OLED</option><option value="capability" data-i18n="capabilityAction">Akcja interfejsu</option></select>
+          <select id="iftttAction"><option value="relay" data-i18n="actionRelay">Steruj przekaźnikiem</option><option value="beeper" data-i18n="actionBeeper">Uruchom buzzer</option><option value="rf24Send" data-i18n="actionRf24" hidden disabled>Nadaj payload RF24</option><option value="rf24Saved" data-i18n="actionRf24Saved" hidden disabled>Odtwórz zapisany RF24</option><option value="oledPage" data-i18n="actionOled">Pokaż stronę OLED</option><option value="capability" data-i18n="capabilityAction">Akcja interfejsu</option><option value="group" data-i18n="actionGroup">Grupa akcji</option></select>
+          <fieldset id="iftttGroupFields" hidden>
+            <legend data-i18n="actionGroup">Grupa akcji</legend>
+            <label class="field-label" for="iftttGroupMode" data-i18n="groupMode">Tryb wykonania</label>
+            <select id="iftttGroupMode"><option value="sequential" data-i18n="groupSequential">Po kolei · przerwij po błędzie</option><option value="all" data-i18n="groupParallel">Wszystkie · nie przerywaj po błędzie</option></select>
+            <label class="field-label" for="iftttGroupAction" data-i18n="groupAddAction">Akcja do grupy</label>
+            <select id="iftttGroupAction"><option value="relay" data-i18n="actionRelay">Steruj przekaźnikiem</option><option value="beeper" data-i18n="actionBeeper">Uruchom buzzer</option><option value="rf24Send" data-i18n="actionRf24" hidden disabled>Nadaj payload RF24</option><option value="rf24Saved" data-i18n="actionRf24Saved" hidden disabled>Odtwórz zapisany RF24</option><option value="oledPage" data-i18n="actionOled">Pokaż stronę OLED</option><option value="capability" data-i18n="capabilityAction">Akcja interfejsu</option></select>
+            <button class="secondary-button" id="addIftttGroupAction" type="button" data-i18n="groupAdd">Dodaj akcję</button>
+            <div class="ifttt-group-list" id="iftttGroupActionList"></div>
+          </fieldset>
           <div id="iftttCapabilityFields" hidden><select id="iftttCapabilityAction" aria-label="Interface action"></select><div id="iftttCapabilityParameters"></div></div>
           <div class="ifttt-condition-row" id="relayActionFields">
             <select id="iftttRelay"><option value="1">Relay 1</option><option value="2">Relay 2</option><option value="3">Relay 3</option><option value="4">Relay 4</option><option value="5">Relay 5</option><option value="6">Relay 6</option></select>
@@ -433,7 +442,7 @@
           <p class="form-message" id="iftttMessage" role="status"></p>
         </form>
         <section class="panel devices-panel">
-          <div class="panel-heading"><div><p class="eyebrow" data-i18n="savedRules">ZAPISANE</p><h2 data-i18n="automationRules">Reguły IFTTT</h2></div><span class="panel-count" id="iftttRuleCount">0 / 4</span></div>
+          <div class="panel-heading"><div><p class="eyebrow" data-i18n="savedRules">ZAPISANE</p><h2 data-i18n="automationRules">Reguły IFTTT</h2></div><span class="panel-count" id="iftttRuleCount">0 / 8</span></div>
           <div class="ifttt-rule-list" id="iftttRuleList"></div>
           <button class="primary-button" id="saveIftttRules" type="button" data-i18n="saveRules">Zapisz reguły</button>
         </section>

@@ -38,6 +38,30 @@ void testConfig() {
     assert(!peripherals::matchesUdpRule(config[0], {192,168,1,3}, 9000, "hello"));
     assert(!peripherals::matchesUdpRule(config[0], {192,168,1,2}, 9001, "hello"));
     assert(!peripherals::matchesUdpRule(config[0], {192,168,1,2}, 9000, "helloworld"));
+    json.clear();
+    JsonArray manyRules = json.to<JsonArray>();
+    for (size_t index = 0; index < peripherals::iftttRuleCapacity; ++index) {
+        JsonObject rule = manyRules.createNestedObject();
+        rule["enabled"] = true;
+        rule["source"] = "udpPacket";
+        JsonObject udp = rule.createNestedObject("udp");
+        udp["port"] = 5000;
+        udp["remoteIp"] = "";
+        udp["remotePort"] = 0;
+        udp["match"] = "exact";
+        udp["text"] = "";
+    }
+    assert(peripherals::readUdpRules(json.as<JsonVariantConst>(), 0, config).ok());
+    assert(config[peripherals::iftttRuleCapacity - 1].enabled);
+    manyRules[4]["udp"]["port"] = 5004;
+    manyRules[5]["udp"]["port"] = 5005;
+    manyRules[6]["udp"]["port"] = 5006;
+    manyRules[7]["udp"]["port"] = 5007;
+    assert(!peripherals::readUdpRules(json.as<JsonVariantConst>(), 0, config).ok());
+    manyRules[4]["udp"]["port"] = 5000;
+    manyRules[5]["udp"]["port"] = 5000;
+    manyRules.createNestedObject();
+    assert(!peripherals::readUdpRules(json.as<JsonVariantConst>(), 0, config).ok());
     const char *invalid[] = {
         R"({"port":0,"remoteIp":"","remotePort":0,"match":"exact","text":""})",
         R"({"port":65536,"remoteIp":"","remotePort":0,"match":"exact","text":""})",
@@ -53,13 +77,14 @@ void testConfig() {
         json.clear(); assert(!deserializeJson(json, text));
         auto candidate = config[0];
         assert(!peripherals::readUdpRule(json.as<JsonVariantConst>(), candidate).ok());
-        assert(candidate.port == 5000 && candidate.textSize == 5);
+        assert(candidate.port == config[0].port && candidate.textSize == config[0].textSize);
     }
 }
 void testRuntime() {
     peripherals::UdpRulesConfig config;
     config[0].enabled = config[1].enabled = config[2].enabled = true;
     config[0].port = config[1].port = 5000; config[2].port = 5001;
+    config[7].enabled = true; config[7].port = 5000;
     config[1].contains = true; config[1].text[0] = 'x'; config[1].textSize = 1;
     FakeUdp hardware;
     peripherals::UdpRules rules{hardware}; rules.configure(config);
@@ -69,11 +94,14 @@ void testRuntime() {
     hardware.packets[1].push_back({"other"});
     assert(rules.tick(20).ok());
     assert(rules.consume(0) == 2 && rules.consume(1) == 1 && rules.consume(2) == 1);
+    assert(rules.consume(7) == 2);
     assert(rules.consume(0) == 0);
     core::PropertySnapshot value;
     assert(rules.readProperty("udp.rules/1/matches", value).ok());
     assert(std::get<uint32_t>(value.value) == 2 && value.updatedAtMs == 20 && value.quality == core::Quality::Valid);
     assert(rules.readProperty("udp.rules/4/matches", value).ok() && value.quality == core::Quality::Disabled);
+        assert(rules.readProperty("udp.rules/8/matches", value).ok() &&
+            std::get<uint32_t>(value.value) == 2 && value.quality == core::Quality::Valid);
     hardware.online = false; assert(rules.tick(30).ok());
     assert(hardware.ports[0] == 0 && rules.consume(0) == 0);
     hardware.online = true; hardware.failOpen = true; assert(!rules.tick(40).ok());

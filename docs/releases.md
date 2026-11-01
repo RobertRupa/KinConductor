@@ -9,6 +9,11 @@ version tags and to build/package every configured PlatformIO profile in an
 independent job. The A4/A8/A8S/A16/A32/A64/A128 aliases remain A6-baseline
 builds, not electrically validated profiles for those boards.
 
+The working tree prepares **1.1.5** with a single factory application
+partition and a larger LittleFS partition. There is no firmware OTA updater or
+rollback slot. The partition migration keeps NVS at offset `0x9000`, size
+`0x5000`, but moves LittleFS; it has not been physically tested on a board.
+
 Version 1.1.0 pins PlatformIO Core 6.2.0 in CI, the official pioarduino
 `55.03.312-1` platform release (Arduino ESP32 3.3.12 / IDF 5.5.5),
 and the tested library versions in [platformio.ini](../platformio.ini).
@@ -20,7 +25,7 @@ npm run build:all
 npm test
 npm run build:fs:all
 for profile in kc868-a6-base kc868-a6 kc868-a4 kc868-a8 kc868-a8s kc868-a16 kc868-a32 kc868-a64 kc868-a128 kc868-a6-coprocessor; do
-  npm run package:release -- "$profile" v1.1.4
+  npm run package:release -- "$profile" v1.1.5
 done
 ```
 
@@ -29,33 +34,33 @@ Run builds sequentially with tests: dependency-resolution changes may replace
 only with the coprocessor profile, use
 `PIO_ENV=kc868-a6-coprocessor npm test`.
 
-Outputs are under ignored `dist/releases/v1.1.4/<profile>/`:
+Outputs are under ignored `dist/releases/v1.1.5/<profile>/`:
 
 | Image | Purpose / serial offset |
 | --- | --- |
-| `firmware.bin` | Application / app0 `0x10000` |
+| `firmware.bin` | Application / factory partition `0x10000` |
 | `firmware.factory.bin` | Padded merged factory image / `0x0`; excludes LittleFS |
-| `littlefs.bin` | Matching WebGUI filesystem / `0x310000` |
+| `littlefs.bin` | Matching WebGUI filesystem / `0x250000` |
 | `bootloader.bin` | Bootloader / `0x1000` |
 | `partitions.bin` | Partition table / `0x8000` |
-| `boot_app0.bin` | Initial OTA-data block extracted from the verified factory image / `0xe000` |
 
-`manifest.json` records project version/tag, full source commit, profile,
-partition layout, image lengths, SHA256 hashes and exact remaining OTA bytes.
+`manifest.json` schema v2 records project version/tag, full source commit,
+profile, partition layout, image lengths, SHA256 hashes and free application
+partition bytes.
 `SHA256SUMS` and `README.txt` accompany every package. The packager rejects
 oversized applications, wrong LittleFS lengths, unsupported/overlapping
 partition layouts, mismatched factory components and version/profile mismatches.
 Package only a clean, committed build when publishing a release: local checks
 before the commit do not establish final source provenance.
 
-**Routine updates should use separate PlatformIO `upload` and `uploadfs` with
-the matching environment and unchanged partition table, preserving NVS.**
-Disconnect unsafe loads and confirm the target port first.
-An OTA application uses the updater's selected inactive partition; the serial
-app0 offset is not an instruction to write a running image into an inactive slot.
-Factory padding spans NVS and OTA metadata: factory flashing may destroy
-credentials/calibration and is reserved for deliberate initial provisioning.
-Do not use erase-flash or factory flashing to preserve settings.
+**Firmware updates are serial-only; there is no OTA update or rollback slot.**
+For the one-time migration from the v1.1.4 partition layout, upload firmware
+and its partition table, then upload the matching LittleFS image as separate
+PlatformIO operations. NVS offset/size remain unchanged. For routine updates
+after migration, use separate `upload` and `uploadfs` operations and preserve
+the partition table. Disconnect unsafe loads and confirm the target port first.
+Factory images span NVS and may destroy credentials/calibration; they are not
+routine NVS-preserving updates. Never erase flash to perform this migration.
 
 ## CI triggers and release publication
 
@@ -88,7 +93,7 @@ For a future authorized publication from your own environment:
 
 ```sh
 git remote add origin https://github.com/RobertRupa/KinConductor.git
-git push --atomic origin HEAD v1.1.4
+git push --atomic origin HEAD v1.1.5
 ```
 
 Create the repository and verify its licensing/contents before those commands;
@@ -97,6 +102,7 @@ Inspect both build jobs and the release job in Actions, then download the
 archives and verify `sha256sum -c SHA256SUMS` inside each extracted profile.
 The tag-triggered run, not a local compile, is the GitHub build acceptance test.
 
-**Publication status:** local builds, tests and packaging must pass before the
-tag is pushed. The GitHub Actions run on `v1.1.4` is the release acceptance
-check; a release is published only after all ten profile jobs succeed.
+**Publication status:** `v1.1.4` is the latest published tag. Version `1.1.5`
+is being prepared locally; its builds, tests and packages must pass before that
+tag is pushed. GitHub Actions publishes the release only after all ten profile
+jobs succeed.

@@ -13,6 +13,9 @@
 
 	Use the correct COM port on Windows. Firmware and filesystem are separate
 	uploads; do not combine the targets in one command.
+	For existing installations upgrading to the 1.1.5 partition layout, use
+	the one-time migration procedure in [Build, upload and validation](./build.md)
+	instead of these routine upload commands.
 2. Join the open `KC868-A6-XXXX` access point and open `http://192.168.4.1`.
 	Setup mode does not request Wi-Fi or web login passwords.
 3. Choose a Wi-Fi network in the panel. Credentials are stored in ESP32 NVS;
@@ -54,5 +57,5 @@ The WebGUI pages and their controls are described in the
 [WebGUI guide](./webgui.md), which includes screenshots from a working device.
 The header reports chip model, core count and configured MHz, free/total heap,
 PSRAM availability and physical flash/application size. Newer firmware may
-also report remaining OTA application space and per-core CPU utilization.
+also report free application-partition space and per-core CPU utilization.
 MHz is not CPU load, and heap capacity is not a claim about all physical SRAM.

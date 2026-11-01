@@ -235,7 +235,8 @@ uint32_t lastDisplayPageMs = 0;
 uint8_t currentDisplayPage = 1;
 uint8_t iftttDisplayPage = 0;
 String iftttRulesJson = "[]";
-kc868a6::core::ConditionState iftttConditions[4] = {};
+std::array<kc868a6::core::ConditionState,
+           kc868a6::peripherals::iftttRuleCapacity> iftttConditions{};
 uint32_t lastIftttMs = 0;
 
 void configureBluetooth(uint8_t mode);
@@ -1008,7 +1009,7 @@ double iftttValue(const char *source) {
 
 void updateIftttRules(const String &rules) {
     iftttRulesJson = rules;
-    for (auto &condition : iftttConditions) condition = {};
+    iftttConditions.fill({});
     DynamicJsonDocument document(8192);
     if (deserializeJson(document, rules) || !document.is<JsonArray>()) {
         udpRules.configure({});
@@ -1033,7 +1034,7 @@ void evaluateIftttRules() {
     }
     uint8_t ruleIndex = 0;
     for (JsonObject rule : document.as<JsonArray>()) {
-        if (ruleIndex >= 4) break;
+        if (ruleIndex >= kc868a6::peripherals::iftttRuleCapacity) break;
         uint8_t fires = 0;
         const uint8_t udpMatches = udpRules.consume(ruleIndex);
         if (rule["enabled"] | false) {
@@ -1050,36 +1051,58 @@ void evaluateIftttRules() {
         for (uint8_t firing = 0; firing < fires; ++firing) {
             const String ruleName = "Reguła " + String(ruleIndex + 1);
             recordEvent("IFTTT: " + ruleName + " wyzwolona.");
-            const char *action = rule["action"] | "relay";
-            bool actionSucceeded = true;
-            if (strcmp(action, "capability") == 0) {
-                const auto result = kc868a6::web::executeJsonAction(
-                    peripheralRegistry, rule["command"]);
-                reportCoreError(result.result);
-                actionSucceeded = result.result.ok() && result.applied;
-            } else if (strcmp(action, "rf24Send") == 0 ||
-                strcmp(action, "rf24Saved") == 0) {
-#if defined(USE_RADIO_NRF24)
-                actionSucceeded = sendNrf24Packet(rule["payload"] | 0U);
-#else
-                actionSucceeded = false;
-                reportCoreError({kc868a6::core::ErrorCode::Unavailable, "rf24_not_compiled"});
-#endif
-            } else if (strcmp(action, "beeper") == 0) {
-                actionSucceeded = startBeeperTest();
-            } else if (strcmp(action, "oledPage") == 0) {
-                const uint8_t page = rule["page"] | 0;
-                if (page >= 1 && page <= 3) iftttDisplayPage = page;
-                else actionSucceeded = false;
-            } else {
-                const int relay = rule["relay"] | 0;
-                if (relay >= 1 && relay <= kc868a6::relayCount) {
-                    actionSucceeded = setRelay(static_cast<uint8_t>(relay - 1),
-                                               rule["on"] | false);
-                } else {
-                    actionSucceeded = false;
+            const auto executeAction = [&](auto &&self, JsonVariantConst descriptor,
+                                           bool allowGroup) -> bool {
+                const char *action = descriptor["action"] | "relay";
+                if (strcmp(action, "group") == 0) {
+                    if (!allowGroup) return false;
+                    const char *mode = descriptor["mode"] | "";
+                    const bool sequential = strcmp(mode, "sequential") == 0;
+                    if (!sequential && strcmp(mode, "all") != 0) return false;
+                    JsonArrayConst actions = descriptor["actions"].as<JsonArrayConst>();
+                    if (actions.isNull() || actions.size() == 0 ||
+                        actions.size() > kc868a6::peripherals::iftttActionCapacity) return false;
+                    bool succeeded = true;
+                    for (JsonVariantConst child : actions) {
+                        const bool childSucceeded = self(self, child, false);
+                        succeeded = childSucceeded && succeeded;
+                        if (sequential && !childSucceeded) break;
+                    }
+                    return succeeded;
                 }
-            }
+                if (strcmp(action, "capability") == 0) {
+                const auto result = kc868a6::web::executeJsonAction(
+                        peripheralRegistry, descriptor["command"]);
+                reportCoreError(result.result);
+                    return result.result.ok() && result.applied;
+                }
+                if (strcmp(action, "rf24Send") == 0 || strcmp(action, "rf24Saved") == 0) {
+#if defined(USE_RADIO_NRF24)
+                    return sendNrf24Packet(descriptor["payload"] | 0U);
+#else
+                    reportCoreError({kc868a6::core::ErrorCode::Unavailable, "rf24_not_compiled"});
+                    return false;
+#endif
+                }
+                if (strcmp(action, "beeper") == 0) return startBeeperTest();
+                if (strcmp(action, "oledPage") == 0) {
+                    const uint8_t page = descriptor["page"] | 0;
+                    if (page >= 1 && page <= 3) {
+                        iftttDisplayPage = page;
+                        return true;
+                    }
+                    return false;
+                }
+                if (strcmp(action, "relay") == 0) {
+                    const int relay = descriptor["relay"] | 0;
+                    if (relay >= 1 && relay <= kc868a6::relayCount) {
+                        return setRelay(static_cast<uint8_t>(relay - 1),
+                                        descriptor["on"] | false);
+                    }
+                }
+                return false;
+            };
+            const bool actionSucceeded = executeAction(executeAction, rule, true);
             if (!actionSucceeded) {
                 recordEvent("IFTTT: akcja reguły " + String(ruleIndex + 1) +
                             " nie powiodła się.");

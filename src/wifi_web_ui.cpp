@@ -81,8 +81,8 @@ void WifiWebUi::begin(StatusProvider statusProvider, RelayWriter relayWriter,
     }
     if (settingsApplier_) settingsApplier_(settings());
 
-    if (!LittleFS.begin(false, "/littlefs", 10, "littlefs")) {
-        Serial.println("ERROR: LittleFS mount failed (partition: littlefs)");
+    if (!LittleFS.begin(false, "/littlefs", 10, "fsdata")) {
+        Serial.println("ERROR: LittleFS mount failed (partition: fsdata)");
     } else {
         Serial.printf("LittleFS mounted: %u/%u bytes, index.html: %s\n",
                       LittleFS.usedBytes(), LittleFS.totalBytes(),
@@ -655,7 +655,7 @@ void WifiWebUi::handleIfttt(bool save) {
         }
 
         JsonArray rules = request.as<JsonArray>();
-        if (rules.size() > 4) {
+        if (rules.size() > kc868a6::peripherals::iftttRuleCapacity) {
             server_.send(400, "application/json", "{\"error\":\"too_many_rules\"}");
             return;
         }
@@ -677,13 +677,48 @@ void WifiWebUi::handleIfttt(bool save) {
             "digital5", "digital6", "digital7", "digital8",
             "analog1", "analog2", "analog3", "analog4"
         };
+        const auto validateAction = [&](auto &&self, JsonVariantConst candidate,
+                                        bool allowGroup) -> bool {
+            if (!candidate.is<JsonObjectConst>()) return false;
+            const char *action = candidate["action"] | "relay";
+            if (strcmp(action, "group") == 0) {
+                if (!allowGroup) return false;
+                const char *mode = candidate["mode"] | "";
+                JsonArrayConst actions = candidate["actions"].as<JsonArrayConst>();
+                if ((strcmp(mode, "all") != 0 && strcmp(mode, "sequential") != 0) ||
+                    actions.isNull() || actions.size() == 0 ||
+                    actions.size() > kc868a6::peripherals::iftttActionCapacity) return false;
+                for (JsonVariantConst child : actions) {
+                    if (!self(self, child, false)) return false;
+                }
+                return true;
+            }
+            const int relay = candidate["relay"] | 0;
+            const uint8_t page = candidate["page"] | 0;
+#if defined(USE_RADIO_NRF24)
+            const uint64_t payload = candidate["payload"] | 0ULL;
+            const uint64_t packetId = candidate["packetId"] | 0ULL;
+            const bool rf24ActionAllowed = payload <= UINT32_MAX;
+            uint32_t savedPayload = 0;
+            const bool rf24SavedActionAllowed =
+                packetId <= UINT32_MAX &&
+                findSavedRf24Packet(preferences_, static_cast<uint32_t>(packetId), savedPayload) &&
+                savedPayload == payload;
+#endif
+            return (strcmp(action, "relay") == 0 && relay >= 1 && relay <= 6) ||
+#if defined(USE_RADIO_NRF24)
+                (strcmp(action, "rf24Send") == 0 && rf24ActionAllowed) ||
+                (strcmp(action, "rf24Saved") == 0 && rf24SavedActionAllowed) ||
+#endif
+                (strcmp(action, "beeper") == 0) ||
+                (strcmp(action, "capability") == 0 &&
+                 kc868a6::web::executeJsonAction(registry_, candidate["command"], false).result.ok()) ||
+                (strcmp(action, "oledPage") == 0 && page >= 1 && page <= 3);
+        };
         for (JsonObject rule : rules) {
             const char *source = rule["source"] | "";
             const char *comparison = rule["comparison"] | "";
-            const int relay = rule["relay"] | 0;
-            const uint8_t page = rule["page"] | 0;
             const float threshold = rule["threshold"] | 0.0F;
-            const char *action = rule["action"] | "relay";
             bool sourceAllowed = registry_.findProperty(source) != nullptr || strcmp(source, "udpPacket") == 0;
             for (const char *candidate : allowedSources) {
                 if (strcmp(source, candidate) == 0) sourceAllowed = true;
@@ -693,29 +728,9 @@ void WifiWebUi::handleIfttt(bool save) {
                 strcmp(comparison, ">=") == 0 || strcmp(comparison, "<=") == 0 ||
                 strcmp(comparison, "==") == 0 || strcmp(comparison, "!=") == 0 ||
                 strcmp(comparison, "changed") == 0;
-#if defined(USE_RADIO_NRF24)
-            const uint64_t payload = rule["payload"] | 0ULL;
-            const uint64_t packetId = rule["packetId"] | 0ULL;
-            const bool rf24ActionAllowed = payload <= UINT32_MAX;
-            uint32_t savedPayload = 0;
-            const bool rf24SavedActionAllowed =
-                packetId <= UINT32_MAX &&
-                findSavedRf24Packet(preferences_, static_cast<uint32_t>(packetId),
-                                    savedPayload) &&
-                savedPayload == payload;
-#endif
-            const bool actionAllowed =
-                (strcmp(action, "relay") == 0 && relay >= 1 && relay <= 6) ||
-#if defined(USE_RADIO_NRF24)
-                (strcmp(action, "rf24Send") == 0 && rf24ActionAllowed) ||
-                (strcmp(action, "rf24Saved") == 0 && rf24SavedActionAllowed) ||
-#endif
-                (strcmp(action, "beeper") == 0) ||
-                (strcmp(action, "capability") == 0 &&
-                 kc868a6::web::executeJsonAction(registry_, rule["command"], false).result.ok()) ||
-                (strcmp(action, "oledPage") == 0 && page >= 1 && page <= 3);
             if (!rule["enabled"].is<bool>() || !sourceAllowed ||
-                !(strcmp(source, "udpPacket") == 0 || comparisonAllowed) || !actionAllowed ||
+                !(strcmp(source, "udpPacket") == 0 || comparisonAllowed) ||
+                !validateAction(validateAction, rule, true) ||
                 !isfinite(threshold)) {
                 server_.send(400, "application/json", "{\"error\":\"invalid_rule\"}");
                 return;

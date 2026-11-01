@@ -60,11 +60,17 @@ serial buses, their addresses or GPIO mapping, and detection state.
 The OLED section can disable the SSD1306, select automatic rotation or a fixed
 status/sensor/air-quality/custom-grid page, choose grid fields, brightness/
 contrast and rotation, and set the page interval. The IFTTT page stores
-up to four rules in NVS and restores them on restart. Conditions can use either
+up to eight rules in NVS and restores them on restart. The same source can be
+used by multiple rules. A rule can contain up to eight actions in a composite
+group. Conditions can use either
 configured temperature pin, DHT22/BME680 humidity, BME680 temperature, ENS160
 AQI, S2, received RF24 packets, digital inputs or raw ADC readings. Actions can
-set a relay, show an OLED page or send a saved RF24 payload when a condition
-changes from false to true. RF24 transmission is available only in the
+set a relay, show an OLED page, send a saved RF24 payload, or invoke a typed
+capability action when a condition changes from false to true. Sequential
+groups stop after the first failed action. "All actions" groups attempt every
+action even after a failure; the MCU still runs them synchronously in order,
+not simultaneously. The request remains bounded by an 8 KiB JSON limit. RF24
+transmission is available only in the
 `-DUSE_RADIO_NRF24` build and uses the pipe/channel above.
 
 The newer **IO** page uses registered capabilities for module readings and
@@ -198,7 +204,7 @@ shared listener is disabled. Port 5353 is reserved for mDNS, and an active
 rule port cannot equal the shared UDP port. Conflicting rule/settings saves
 return HTTP 409 without replacing the previous record.
 
-Example rule for `/api/ifttt` (the endpoint accepts an array of up to four):
+Example rule for `/api/ifttt` (the endpoint accepts an array of up to eight):
 
 ```json
 {
@@ -210,13 +216,31 @@ Example rule for `/api/ifttt` (the endpoint accepts an array of up to four):
 }
 ```
 
+A composite action uses the same validated action descriptors as individual
+rules:
+
+```json
+{
+  "enabled": true,
+  "source": "buttonS2",
+  "comparison": "==",
+  "threshold": 1,
+  "action": "group",
+  "mode": "sequential",
+  "actions": [
+    {"action": "relay", "relay": 1, "on": true},
+    {"action": "capability", "command": {"id": "transport.main/udp/send", "parameters": {"host": "192.168.1.20", "port": 5001, "data": "accepted"}}}
+  ]
+}
+```
+
 Destination host, port and data belong to the **Interface action →
 transport.main/udp/send**, not the receive-port fields. Save the rules
 explicitly after adding/editing them. Rules sharing a local port share one
 socket; at most four distinct ports are opened. Each matching packet queues
 an action, even when consecutive packets contain the same text, unlike an
 edge comparison on a numeric counter. Read match counters in IO or bind
-`udp.rules/1/matches` through `/4/matches` to OLED/IFTTT.
+`udp.rules/1/matches` through `/8/matches` to OLED/IFTTT.
 
 Processing is bounded to four datagrams per socket per tick and four pending
 matches per rule. Overflow/bind failures surface as module errors; there is

@@ -195,7 +195,7 @@ driverów/protokołów ani ukończenia zależnych 50 zadań.
 | API-01 | Rozpoczęte | `/api/capabilities`, `/api/actions`, `/api/settings/schema`, `/api/screen` z istniejącą polityką auth; jawne błędy/capacity. Versioned pełny API, pagination i migration contracts pozostają. |
 | WEB-01/WEB-02 | Rozpoczęte | Nowe zakładki IO/Ekran/Ustawienia, module cards i typed action forms z descriptors; 27-field settings form ze wspólnego schema. Pozostałe strony nadal legacy, pełny page/widget registry nie istnieje. |
 | OLED-01/GRID-01 | Rozpoczęte | Portable bounded layout, per-page rows/columns, binding ID, preview, NVS record i renderer SSD1306 dla displayMode=5. Driver/manager/page/widget separation i nowe controllers pending. |
-| IFTTT-01 | Rozpoczęte | Registered property sources i generic capability command; wspólny dispatcher przekaźnika. Stary evaluator/4-rule limit pozostają; nowy event engine/scheduler pending. |
+| IFTTT-01 | Rozpoczęte | Registered property sources i generic capability command; wspólny dispatcher przekaźnika. Evaluator nadal jest legacy, ale obsługuje teraz 8 reguł i grupy akcji; nowy event engine/scheduler pending. |
 | BASE-01 | Rozpoczęte | 3 nowe native grupy i 4 nowe JS tests, w tym schema/capability JSON, max pages/widgets, typed actions oraz HTML zamiast JSON. Hardware matrix/power-loss pending. |
 
 Pliki: [BoardIo](./include/peripherals/board_io.h),

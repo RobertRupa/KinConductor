@@ -1,6 +1,6 @@
 {
   "name": "kinconductor",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "KinConductor KC868-Ax ESP32 firmware with board identity, calibrated current inputs, hostname/mDNS, grouped WebGUI, BLE presence, UDP/serial IFTTT, PWM and OLED grids",
   "private": true,
   "directories": {

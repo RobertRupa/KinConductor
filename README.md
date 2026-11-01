@@ -56,7 +56,7 @@ Both firmware and LittleFS must be updated to deploy these fixes; v1.1.2
 has not been uploaded to the physical board from this session.
 Version **1.1.3** identifies the selected KC868-Ax build in the WebGUI and
 favicon, warns when a non-A6 alias still uses the A6 baseline pin map, and
-reports remaining OTA application capacity plus per-core CPU load where
+reports remaining application-partition capacity plus per-core CPU load where
 supported. These aliases are build baselines, not validated electrical
 profiles for the other boards.
 The [release workflow](./.github/workflows/release.yml) builds every configured
@@ -66,6 +66,31 @@ matching tag builds firmware and LittleFS, runs tests, and publishes all ten
 profile archives to GitHub Releases after every job passes. The A4/A8/A8S/A16/
 A32/A64/A128 aliases reuse the A6 baseline pin map and are not electrically
 validated for those boards. Version **1.1.4** updates this release workflow.
+
+The working tree prepares **1.1.5** with one 2.25 MiB factory application
+partition and 1.625 MiB LittleFS instead of the unused second OTA slot. This
+firmware has no OTA update or rollback path; updates are serial-only. Migration
+from the previous partition layout requires uploading the firmware/partition
+table and matching LittleFS. NVS remains at the same offset and size; physical
+board migration has not been tested. See the [one-time migration procedure](./docs/build.md)
+before upgrading an existing installation.
+
+## Browser factory flasher
+
+[KinConductorFlasher](https://robertrupa.github.io/KinConductorFlasher/) is a
+browser-based installer for published KinConductor firmware releases. It
+verifies the selected release manifest and image hashes, then installs the
+factory firmware and matching LittleFS image over USB. Use desktop Chrome or
+Edge over HTTPS; the browser must support Web Serial. The catalog contains
+published releases, so it may not include this repository's untagged changes.
+
+**Warning: factory installation can erase NVS**, including saved Wi-Fi
+credentials and calibration, and overwrites OTA metadata. Back up settings,
+verify the board and serial port, and disconnect unsafe relay loads before
+proceeding. This installer is for first installation or deliberate recovery,
+not routine configuration-preserving updates. For this checkout's current
+single-partition layout, follow the [PlatformIO deployment instructions](./docs/build.md)
+and the required one-time migration steps instead.
 
 ## Quick start
 
@@ -87,7 +112,7 @@ build-time baseline compatibility work, not validated pinout-equivalent runtime
 support on those boards.
 The WebGUI model badge/title/favicon follow the selected build; diagnostics
 warns that non-A6 aliases still display the A6 GPIO map. The header now shows
-the remaining OTA app-partition capacity and, where FreeRTOS runtime counters
+the remaining application-partition capacity and, where FreeRTOS runtime counters
 are enabled, CPU load by core. See [build and profile limits](./docs/build.md).
 
 Before uploading, disconnect unsafe loads, confirm the board and port,

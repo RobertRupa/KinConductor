@@ -29,8 +29,8 @@ output. Check the connected load and device state before testing; an IFTTT
 rule can trigger an action independently of manual control.
 
 The header reports the CPU model, core count and clock speed, free/total heap,
-PSRAM and flash. Additional values, such as free OTA space or per-core CPU
-utilization, depend on the firmware/WebGUI version.
+PSRAM and flash. Additional values, such as free application-partition space
+or per-core CPU utilization, depend on the firmware/WebGUI version.
 
 ## IO — capability readings and actions
 
@@ -83,9 +83,13 @@ reservation. See [pin resources and constraints](./hardware.md).
 
 A rule combines a source, operator/threshold and action. Available sources and
 actions depend on the modules registered and options enabled in that firmware.
-The system stores up to four rules. For UDP, configure a rule receive port,
-sender filter and text match. Edge-triggered conditions run an action when the
-condition changes from false to true, not on every refresh.
+The system stores up to eight rules, including multiple rules using the same
+source. A composite action can contain up to eight actions and run them in
+sequence (stop at the first failure) or best-effort (attempt all actions).
+Best-effort execution is still synchronous on the MCU, not simultaneous. For
+UDP, configure a rule receive port, sender filter and text match; at most four
+distinct UDP ports can be listened to. Edge-triggered conditions run an action
+when the condition changes from false to true, not on every refresh.
 
 Start by adding and testing one rule while monitoring the event stream; only
 then increase the number of automations. Do not test with a load that could

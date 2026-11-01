@@ -186,6 +186,9 @@ button, select { cursor: pointer; }
 #bleSavedTargets .device-card > div { min-width: 0; overflow-wrap: anywhere; }
 .add-rule-button { width: 100%; margin-top: 17px; }
 .ifttt-rule-list { display: grid; gap: 8px; }
+.ifttt-group-list { display: grid; gap: 6px; margin-top: 8px; }
+.ifttt-group-action { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 7px 9px; background: #f7f9f6; border: 1px solid #ebefea; border-radius: 4px; font-size: 10px; overflow-wrap: anywhere; }
+.ifttt-group-action button { flex: none; }
 .ifttt-rule { min-height: 54px; display: grid; grid-template-columns: 18px minmax(0, 1fr) 30px; align-items: center; gap: 9px; padding: 9px 10px; background: #f7f9f6; border: 1px solid #ebefea; border-radius: 4px; }
 .ifttt-rule input { accent-color: var(--forest-2); }
 .ifttt-rule > span { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }

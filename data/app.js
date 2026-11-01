@@ -62,7 +62,7 @@ const translations = {
     boardLimits: "Ograniczenia", boardInputOnly: "tylko wejście", boardStrapping: "strapping",
     boardPlanNote: "Rezerwacje konfiguracji, nie detekcja sprzętu. P17 nie dodaje czwartego UART. GPIO12: pin strapping.",
     boardPinoutUnvalidated: "UWAGA: mapowanie pinów poniżej jest profilem bazowym KC868-A6, a nie zweryfikowanym pinoutem tej płyty.",
-    flashFreeOta: "wolne OTA",
+    flashFreeApp: "wolne miejsce",
     boardValid: "Plan zasobów poprawny", boardError: "Nie udało się odczytać profilu płytki.",
     boardConfigUnavailable: "Konfiguracja niedostępna; pokazano ostatnie ustawienia RAM lub defaults.",
     runtimeStatus: "Stan urządzenia", rf24RadioState: "nRF24", rf24LastPacket: "Ostatni pakiet",
@@ -123,7 +123,10 @@ const translations = {
     actionOled: "Pokaż stronę OLED", devBluetooth: "Bluetooth LE",
     turnOn: "Włącz", turnOff: "Wyłącz", addRule: "Dodaj regułę", savedRules: "ZAPISANE",
     automationRules: "Reguły IFTTT", saveRules: "Zapisz reguły", noRules: "Brak reguł.",
-    ruleLimit: "Limit 4 reguł.", ruleSaved: "Reguły zapisane.", ruleSaveError: "Nie udało się zapisać reguł.",
+    actionGroup: "Grupa akcji", groupMode: "Tryb wykonania", groupSequential: "Po kolei · przerwij po błędzie",
+    groupParallel: "Wszystkie · nie przerywaj po błędzie", groupAddAction: "Akcja do grupy",
+    groupAdd: "Dodaj akcję", groupEmpty: "Dodaj co najmniej jedną akcję do grupy.",
+    ruleLimit: "Limit 8 reguł.", ruleSaved: "Reguły zapisane.", ruleSaveError: "Nie udało się zapisać reguł.",
     bluetoothScanError: "Skan BLE nie powiódł się."
   },
   en: {
@@ -189,7 +192,7 @@ const translations = {
     boardLimits: "Constraints", boardInputOnly: "input only", boardStrapping: "strapping",
     boardPlanNote: "Configuration reservations, not hardware detection. P17 does not add a fourth UART. GPIO12: strapping pin.",
     boardPinoutUnvalidated: "WARNING: the pin map below is the KC868-A6 baseline, not a validated pinout for this board.",
-    flashFreeOta: "OTA free",
+    flashFreeApp: "free app space",
     boardValid: "Resource plan valid", boardError: "Could not read the board profile.",
     boardConfigUnavailable: "Configuration unavailable; showing last RAM settings or defaults.",
     runtimeStatus: "Device status", rf24RadioState: "nRF24", rf24LastPacket: "Last packet",
@@ -249,7 +252,10 @@ const translations = {
     actionOled: "Show OLED page", devBluetooth: "Bluetooth LE",
     turnOn: "Turn on", turnOff: "Turn off", addRule: "Add rule", savedRules: "SAVED",
     automationRules: "IFTTT rules", saveRules: "Save rules", noRules: "No rules yet.",
-    ruleLimit: "Up to 4 rules.", ruleSaved: "Rules saved.", ruleSaveError: "Could not save rules.",
+    actionGroup: "Action group", groupMode: "Execution mode", groupSequential: "In order · stop on failure",
+    groupParallel: "All actions · continue after failure", groupAddAction: "Action to add",
+    groupAdd: "Add action", groupEmpty: "Add at least one action to the group.",
+    ruleLimit: "Up to 8 rules.", ruleSaved: "Rules saved.", ruleSaveError: "Could not save rules.",
     bluetoothScanError: "BLE scan failed."
   }
 };
@@ -261,6 +267,7 @@ let deviceSettings = {};
 let lastDeviceList = [];
 let lastI2cDetected = [];
 let iftttRules = [];
+let iftttGroupActions = [];
 let rf24History = [];
 let savedRf24Packets = [];
 let nearbyBluetoothDevices = [];
@@ -425,7 +432,7 @@ function renderHardware(hardware) {
   $("#headerRam").textContent = `${kib(hardware.ram.freeBytes)} / ${kib(hardware.ram.heapBytes)} heap`;
   $("#headerPsram").textContent = hardware.psram.totalBytes ? `${kib(hardware.psram.freeBytes)} / ${kib(hardware.psram.totalBytes)}` : "0";
   $("#headerFlash").textContent =
-    `${(hardware.flash.totalBytes / 1048576).toFixed(0)} MiB · ${kib(hardware.flash.freeBytes)} ${t("flashFreeOta")} · FW ${kib(hardware.flash.firmwareBytes)}`;
+    `${(hardware.flash.totalBytes / 1048576).toFixed(0)} MiB · ${kib(hardware.flash.freeBytes)} ${t("flashFreeApp")} · FW ${kib(hardware.flash.firmwareBytes)}`;
   $("#headerModel").textContent = model;
   $("#diagnosticModel").textContent = model;
   $("#brandMark").textContent = model.replace(/^KC868-/, "");
@@ -686,7 +693,7 @@ function setRf24Support(compiled) {
     if (!source.value) source.value = "buttonS2";
     updateIftttSourceFields();
   }
-  for (const option of document.querySelectorAll("#iftttAction option")) {
+  for (const option of document.querySelectorAll("#iftttAction option, #iftttGroupAction option")) {
     if (option.value === "rf24Send" || option.value === "rf24Saved") {
       option.hidden = !rf24Compiled;
       if (!rf24Compiled) option.disabled = true;
@@ -915,10 +922,20 @@ function iftttSourceLabel(source) {
   return source;
 }
 
+function iftttActionLabel(action) {
+  if (action.action === "capability") return action.command?.id || "--";
+  if (action.action === "relay") return `${t("actionRelay")} ${action.relay} · ${t(action.on ? "turnOn" : "turnOff")}`;
+  if (action.action === "oledPage") return `${t("actionOled")} ${action.page}`;
+  if (action.action === "rf24Send" || action.action === "rf24Saved") {
+    return `${t(action.action === "rf24Send" ? "actionRf24" : "actionRf24Saved")} · ${action.payload}`;
+  }
+  return t(`action${action.action[0].toUpperCase()}${action.action.slice(1)}`);
+}
+
 function renderIftttRules() {
   const list = $("#iftttRuleList");
   list.replaceChildren();
-  $("#iftttRuleCount").textContent = `${iftttRules.length} / 4`;
+  $("#iftttRuleCount").textContent = `${iftttRules.length} / 8`;
   if (iftttRules.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
@@ -935,7 +952,11 @@ function renderIftttRules() {
     enabled.setAttribute("aria-label", `Enable rule ${index + 1}`);
     enabled.addEventListener("change", () => { rule.enabled = enabled.checked; });
     const description = document.createElement("span");
-    if (rule.action === "capability") {
+    if (rule.action === "group") {
+      const actions = (rule.actions || []).map(iftttActionLabel);
+      const modeLabel = t(rule.mode === "sequential" ? "groupSequential" : "groupParallel");
+      description.textContent = `${iftttSourceLabel(rule.source)} ${rule.comparison} ${rule.threshold} → ${t("actionGroup")} (${modeLabel}): ${actions.join(", ")}`;
+    } else if (rule.action === "capability") {
       description.textContent = `${iftttSourceLabel(rule.source)} ${rule.comparison} ${rule.threshold} → ${rule.command?.id || "--"} ${JSON.stringify(rule.command?.parameters || {})}`;
     } else if (rule.action === "beeper") {
       description.textContent = `${iftttSourceLabel(rule.source)} ${rule.comparison} ${rule.threshold} → ${t("actionBeeper")}`;
@@ -966,7 +987,7 @@ function renderIftttRules() {
     row.append(enabled, description, remove);
     list.append(row);
   });
-  $("#addIftttRule").disabled = iftttRules.length >= 4;
+  $("#addIftttRule").disabled = iftttRules.length >= 8;
 }
 
 async function loadIftttRules() {
@@ -1191,22 +1212,27 @@ document.querySelectorAll(".page-tab").forEach((tab) => {
 });
 $("#iftttBuilderForm").addEventListener("submit", (event) => event.preventDefault());
 function updateIftttActionFields() {
-  const action = $("#iftttAction").value;
-  const beeperOption = $("#iftttAction option[value='beeper']");
-  const rf24Option = $("#iftttAction option[value='rf24Send']");
-  const savedRf24Option = $("#iftttAction option[value='rf24Saved']");
-  beeperOption.disabled = !deviceSettings.beeperEnabled;
-  rf24Option.disabled = !rf24Compiled || !rf24Available;
-  savedRf24Option.disabled = !rf24Compiled || !rf24Available || savedRf24Packets.length === 0;
-  if (action === "beeper" && beeperOption.disabled) $("#iftttAction").value = "relay";
-  if (action === "rf24Send" && rf24Option.disabled) $("#iftttAction").value = "relay";
-  if (action === "rf24Saved" && savedRf24Option.disabled) $("#iftttAction").value = "relay";
-  const selectedAction = $("#iftttAction").value;
-  const radioAction = selectedAction === "rf24Send";
-  const savedRadioAction = selectedAction === "rf24Saved";
-  const oledAction = selectedAction === "oledPage";
-  const beeperAction = selectedAction === "beeper";
-  const capabilityAction = selectedAction === "capability";
+  const grouped = $("#iftttAction").value === "group";
+  const actionSelect = grouped ? $("#iftttGroupAction") : $("#iftttAction");
+  $("#iftttGroupFields").hidden = !grouped;
+  const beeperDisabled = !deviceSettings.beeperEnabled;
+  const rf24Disabled = !rf24Compiled || !rf24Available;
+  const savedRf24Disabled = rf24Disabled || savedRf24Packets.length === 0;
+  for (const selector of ["#iftttAction", "#iftttGroupAction"]) {
+    const select = $(selector);
+    select.querySelector("option[value='beeper']").disabled = beeperDisabled;
+    select.querySelector("option[value='rf24Send']").disabled = rf24Disabled;
+    select.querySelector("option[value='rf24Saved']").disabled = savedRf24Disabled;
+  }
+  const selectedAction = actionSelect.value;
+  const selectedOption = actionSelect.selectedOptions[0];
+  if (selectedOption.disabled) actionSelect.value = "relay";
+  const activeAction = actionSelect.value;
+  const radioAction = activeAction === "rf24Send";
+  const savedRadioAction = activeAction === "rf24Saved";
+  const oledAction = activeAction === "oledPage";
+  const beeperAction = activeAction === "beeper";
+  const capabilityAction = activeAction === "capability";
   $("#iftttCapabilityFields").hidden = !capabilityAction;
   $("#relayActionFields").hidden = radioAction || savedRadioAction || oledAction || beeperAction || capabilityAction;
   $("#rf24ActionFields").hidden = !radioAction;
@@ -1215,12 +1241,74 @@ function updateIftttActionFields() {
   $("#beeperActionFields").hidden = !beeperAction;
 }
 $("#iftttAction").addEventListener("change", updateIftttActionFields);
+$("#iftttGroupAction").addEventListener("change", updateIftttActionFields);
+function renderIftttGroupActions() {
+  const list = $("#iftttGroupActionList");
+  list.replaceChildren();
+  if (!iftttGroupActions.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = t("groupEmpty");
+    list.append(empty);
+  }
+  iftttGroupActions.forEach((action, index) => {
+    const row = document.createElement("div");
+    row.className = "ifttt-group-action";
+    const label = iftttActionLabel(action);
+    const text = document.createElement("span");
+    text.textContent = `${index + 1}. ${label}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "remove-rule";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", `Remove action ${index + 1}`);
+    remove.addEventListener("click", () => {
+      iftttGroupActions.splice(index, 1);
+      renderIftttGroupActions();
+    });
+    row.append(text, remove);
+    list.append(row);
+  });
+  $("#addIftttGroupAction").disabled = iftttGroupActions.length >= 8;
+}
 function updateIftttSourceFields() {
   const udp = $("#iftttSource").value === "udpPacket";
   $("#iftttUdpFields").hidden = !udp;
   $("#iftttNumericCondition").hidden = udp;
 }
 $("#iftttSource").addEventListener("change", updateIftttSourceFields);
+function readIftttAction(action) {
+  if (action === "rf24Send" && ($("#iftttRfPayload").value === "" ||
+      !Number.isInteger(Number($("#iftttRfPayload").value)) ||
+      Number($("#iftttRfPayload").value) < 0 || Number($("#iftttRfPayload").value) > 4294967295)) {
+    throw new Error(t("invalidRf24Payload"));
+  }
+  let command;
+  if (action === "capability") command = window.CapabilityUI.getIftttCommand();
+  const selectedPacket = action === "rf24Saved"
+    ? savedRf24Packets.find((packet) => Number(packet.id) === Number($("#iftttRf24SavedPacket").value))
+    : null;
+  if (action === "rf24Saved" && !selectedPacket) throw new Error(t("rf24SelectSaved"));
+  return {
+    action,
+    ...(command ? { command } : {}),
+    relay: action === "relay" ? Number($("#iftttRelay").value) : 0,
+    on: $("#iftttRelayState").value === "true",
+    payload: action === "rf24Send" ? Number($("#iftttRfPayload").value) : selectedPacket?.payload ?? 0,
+    packetId: selectedPacket?.id ?? 0,
+    page: action === "oledPage" ? Number($("#iftttOledPage").value) : 0
+  };
+}
+$("#addIftttGroupAction").addEventListener("click", () => {
+  if (iftttGroupActions.length >= 8) return;
+  try {
+    iftttGroupActions.push(readIftttAction($("#iftttGroupAction").value));
+    renderIftttGroupActions();
+    $("#iftttMessage").textContent = "";
+  } catch (error) {
+    $("#iftttMessage").textContent = error.message;
+  }
+});
 function udpRuleFromForm() {
   const port = Number($("#iftttUdpPort").value);
   const remotePort = Number($("#iftttUdpRemotePort").value);
@@ -1237,17 +1325,11 @@ function udpRuleFromForm() {
   return { port, remotePort, remoteIp, match: $("#iftttUdpMatch").value, text };
 }
 $("#addIftttRule").addEventListener("click", () => {
-  if (iftttRules.length >= 4) return;
+  if (iftttRules.length >= 8) return;
   const action = $("#iftttAction").value;
   if ($("#iftttSource").value !== "udpPacket" && $("#iftttComparison").value !== "changed" &&
       ($("#iftttThreshold").value === "" || !Number.isFinite(Number($("#iftttThreshold").value)))) {
     $("#iftttMessage").textContent = t("invalidThreshold");
-    return;
-  }
-  if (action === "rf24Send" && ($("#iftttRfPayload").value === "" ||
-      !Number.isInteger(Number($("#iftttRfPayload").value)) ||
-      Number($("#iftttRfPayload").value) < 0 || Number($("#iftttRfPayload").value) > 4294967295)) {
-    $("#iftttMessage").textContent = t("invalidRf24Payload");
     return;
   }
   let udp;
@@ -1255,20 +1337,14 @@ $("#addIftttRule").addEventListener("click", () => {
     try { udp = udpRuleFromForm(); }
     catch (error) { $("#iftttMessage").textContent = error.message; return; }
   }
-  let command;
-  if (action === "capability") {
-    try {
-      command = window.CapabilityUI.getIftttCommand();
-    } catch (error) {
-      $("#iftttMessage").textContent = error.message;
-      return;
-    }
-  }
-  const selectedPacket = action === "rf24Saved"
-    ? savedRf24Packets.find((packet) => Number(packet.id) === Number($("#iftttRf24SavedPacket").value))
-    : null;
-  if (action === "rf24Saved" && !selectedPacket) {
-    $("#iftttMessage").textContent = t("rf24SelectSaved");
+  let actionDefinition;
+  try {
+    actionDefinition = action === "group"
+      ? { action, mode: $("#iftttGroupMode").value, actions: [...iftttGroupActions] }
+      : readIftttAction(action);
+    if (action === "group" && !actionDefinition.actions.length) throw new Error(t("groupEmpty"));
+  } catch (error) {
+    $("#iftttMessage").textContent = error.message;
     return;
   }
   iftttRules.push({
@@ -1277,14 +1353,12 @@ $("#addIftttRule").addEventListener("click", () => {
     ...(udp ? { udp } : {}),
     comparison: $("#iftttComparison").value,
     threshold: udp ? 0 : Number($("#iftttThreshold").value),
-    action,
-    ...(command ? { command } : {}),
-    relay: action === "relay" ? Number($("#iftttRelay").value) : 0,
-    on: $("#iftttRelayState").value === "true",
-    payload: action === "rf24Send" ? Number($("#iftttRfPayload").value) : selectedPacket?.payload ?? 0,
-    packetId: selectedPacket?.id ?? 0,
-    page: action === "oledPage" ? Number($("#iftttOledPage").value) : 0
+    ...actionDefinition
   });
+  if (action === "group") {
+    iftttGroupActions = [];
+    renderIftttGroupActions();
+  }
   renderIftttRules();
 });
 $("#saveIftttRules").addEventListener("click", saveIftttRules);

@@ -29,8 +29,9 @@ English unless another language is explicitly requested.
   not raw-waveform AC RMS, automatic calibration or overcurrent protection.
 - Default hostname is **kinconductor**, without `.local`; mDNS adds the suffix.
 - Routine firmware and LittleFS updates are separate operations, preserve NVS,
-  and require safe-load/port approval. Factory images contain NVS padding and
-  initial OTA metadata and are not NVS-preserving routine updates.
+  and require safe-load/port approval. The 1.1.5 working tree uses a single
+  factory application partition with no OTA rollback; its factory image spans
+  NVS and is not an NVS-preserving routine update.
 
 ## Implementation map and limits
 
@@ -42,10 +43,13 @@ English unless another language is explicitly requested.
   capacity/memory review, not an unchecked registration.
 - Main settings: `ConfigService`, complete record migration, schema API.
   Separate NVS records: OLED layout, current calibration, hostname, BLE target,
-  IFTTT rules. IFTTT remains limited to four rules.
+  IFTTT rules. IFTTT supports up to eight rules and up to eight actions per
+  composite action; the runtime still mirrors rule JSON in a `String` and
+  parses it into a transient 8 KiB `DynamicJsonDocument` during evaluation.
 - Rule UDP: distinct local ports, share one socket for duplicate ports,
-  optional sender IP/port and exact/contains text. Maximum four listeners,
-  256 UTF-8 bytes, bounded queued matches. Global UDP port must not collide.
+  optional sender IP/port and exact/contains text. Maximum four distinct
+  sockets across eight rule slots, 256 UTF-8 bytes, bounded queued matches.
+  Global UDP port must not collide.
 - BLE has one shared nonblocking scanner, bounded 24-device UI cache and up
   to eight independent saved MACs. IDs are `ble.presence/<MAC>/in_range`.
   The legacy alias retains the original migrated MAC, not list position;

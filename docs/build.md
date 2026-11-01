@@ -18,7 +18,24 @@ Select the serial upload port in the PlatformIO toolbar or add
 `upload_port = /dev/ttyUSB0` to `platformio.ini` for your system.
 Use the matching `-e` environment when uploading a feature-specific build.
 
-## Version 1.1.0: current validation
+## Version 1.1.5 working tree: single app and optimized builds
+
+The repository has no firmware OTA updater; the former second application slot
+was unused. The partition table now has one **2.25 MiB** factory application
+and **1.625 MiB** LittleFS partition. NVS remains at offset `0x9000`, size
+`0x5000`. Firmware updates are serial-only and no longer have an OTA rollback
+slot. The partition migration has not been tested on hardware; follow the
+[one-time migration procedure](#deployment-precautions-and-current-profiles).
+
+All ten configured profiles build cleanly with no compiler or partition
+warnings. Firmware images are **1,495,568–1,495,728 B**; each LittleFS image is
+**1,703,936 B**. Release builds use `-Os`, `-g0` and `-fno-exceptions`; the
+toolchain already disables RTTI. The base firmware image is about **49 KiB
+smaller** than v1.1.4. Static RAM remains **78,448 B**: removing debug symbols
+and optimizing for size reduces flash usage, not runtime RAM. Do not treat
+static RAM as a runtime heap or stack measurement.
+
+## Version 1.1.0: historical validation
 
 The official pioarduino platform and tested libraries are pinned for this
 release; see [tagged releases and image packaging](./releases.md).
@@ -63,6 +80,27 @@ Disconnect loads that could be unsafe during reset; relays initialize OFF,
 but persisted IFTTT rules can act after startup. Uploading resets the controller.
 Do not erase NVS or alter the partition table as part of routine deployment.
 Uploading LittleFS replaces the web-assets filesystem.
+
+The 1.1.5 working tree removes the unused second OTA app slot: firmware updates
+are serial-only and have no OTA rollback path. Its factory app partition is
+2.25 MiB and LittleFS is 1.625 MiB at `0x250000`; NVS remains at `0x9000`,
+`0x5000`. PlatformIO's normal `upload` writes only the application, not the
+partition table. For one-time migration from the prior dual-slot layout, build
+the A6 profile and use one esptool invocation to write the partition table,
+application and filesystem together:
+
+```sh
+~/.platformio/penv/bin/python -m esptool --chip esp32 --port /dev/ttyUSB0 --baud 460800 write-flash \
+  0x8000 .pio/build/kc868-a6/partitions.bin \
+  0x10000 .pio/build/kc868-a6/firmware.bin \
+  0x250000 .pio/build/kc868-a6/littlefs.bin
+```
+
+This leaves NVS (`0x9000`–`0xdfff`) untouched and resets once after the writes.
+Use the PlatformIO Python/esptool path and serial port appropriate to your OS.
+Do not flash `firmware.factory.bin` for migration because it spans NVS. This
+layout change has not been tested on physical hardware. After migration,
+routine `upload` and `uploadfs` commands can be used separately.
 
 `kc868-a6-coprocessor` is the default; `kc868-a6` keeps normal UART1 defaults.
 The former selects a diagnostic UART1 default of 115200 baud on GPIO16/17,
@@ -238,8 +276,8 @@ matching SVG favicon at runtime. For Ax aliases other than A6, diagnostics
 explicitly warns that the displayed GPIO/resource map is still the KC868-A6
 baseline. No model-specific pin/IO map has been verified or implemented yet;
 do not deploy these aliases on other boards as electrically validated images.
-The header's free-flash figure is remaining capacity in the running OTA
-application partition, not unused capacity across every flash partition.
+The header's free-flash figure is remaining capacity in the running application
+partition, not unused capacity across every flash partition.
 Per-core CPU utilization is shown when the target FreeRTOS build provides idle
 runtime counters.
 

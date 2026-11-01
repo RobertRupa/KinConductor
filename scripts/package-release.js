@@ -36,13 +36,15 @@ function packageRelease({ root, profile, version, commit, outputRoot }) {
     throw new Error("Release version differs from package or firmware metadata");
   }
   const partitions = parsePartitions(fs.readFileSync(path.join(root, "partitions.csv"), "utf8"));
-  const app = partitions.find((part) => part.type === "app" && part.subtype === "ota_0");
-  const otherApp = partitions.find((part) => part.type === "app" && part.subtype === "ota_1");
-  const filesystem = partitions.find((part) => part.name === "littlefs");
-  const otaData = partitions.find((part) => part.subtype === "ota");
-  if (!app || !otherApp || !filesystem || !otaData || app.size !== otherApp.size ||
-      app.offset !== 0x10000 || otaData.offset !== 0xe000 || otaData.size !== 0x2000) {
-    throw new Error("Unsupported factory/OTA partition layout");
+  const appPartitions = partitions.filter((part) => part.type === "app");
+  const app = appPartitions.find((part) => part.subtype === "factory");
+  const nvs = partitions.find((part) => part.name === "nvs" && part.type === "data" && part.subtype === "nvs");
+  const filesystem = partitions.find((part) => part.type === "data" && part.subtype === "spiffs");
+  if (appPartitions.length !== 1 || !app || !nvs || nvs.offset !== 0x9000 || nvs.size !== 0x5000 ||
+      !filesystem || app.offset !== 0x10000 ||
+      filesystem.offset !== app.offset + app.size || filesystem.offset + filesystem.size > 4 * 1048576 ||
+      partitions.some((part) => part.type === "data" && part.subtype === "ota")) {
+    throw new Error("Unsupported single-app layout or NVS region moved");
   }
   const build = path.join(root, ".pio", "build", profile);
   const firmware = fs.readFileSync(path.join(build, "firmware.bin"));
@@ -50,7 +52,7 @@ function packageRelease({ root, profile, version, commit, outputRoot }) {
   const littlefs = fs.readFileSync(path.join(build, "littlefs.bin"));
   const bootloader = fs.readFileSync(path.join(build, "bootloader.bin"));
   const table = fs.readFileSync(path.join(build, "partitions.bin"));
-  if (!firmware.length || firmware.length > app.size) throw new Error("Firmware exceeds OTA slot");
+  if (!firmware.length || firmware.length > app.size) throw new Error("Firmware exceeds application partition");
   if (littlefs.length !== filesystem.size) throw new Error("LittleFS image differs from partition size");
   if (!bootloader.length || bootloader.length > 0x7000 || table.length !== 0xc00 ||
       factory.length !== app.offset + firmware.length ||
@@ -60,17 +62,16 @@ function packageRelease({ root, profile, version, commit, outputRoot }) {
     throw new Error("Factory image does not match firmware/bootloader/partition artifacts");
   }
   const images = [
-    ["firmware.bin", firmware, "ota-application", app.offset],
+    ["firmware.bin", firmware, "application", app.offset],
     ["firmware.factory.bin", factory, "factory-without-filesystem", 0],
     ["littlefs.bin", littlefs, "filesystem", filesystem.offset],
     ["bootloader.bin", bootloader, "bootloader", 0x1000],
-    ["partitions.bin", table, "partition-table", 0x8000],
-    ["boot_app0.bin", factory.subarray(otaData.offset, otaData.offset + otaData.size), "initial-ota-data", otaData.offset]
+    ["partitions.bin", table, "partition-table", 0x8000]
   ];
   const manifest = {
-    schemaVersion: 1, project: "KinConductor", version, tag: `v${version}`, commit, profile,
-    flashBytes: 4 * 1048576, otaSlotBytes: app.size,
-    firmwareBytes: firmware.length, otaRemainingBytes: app.size - firmware.length,
+    schemaVersion: 2, project: "KinConductor", version, tag: `v${version}`, commit, profile,
+    flashBytes: 4 * 1048576, applicationPartitionBytes: app.size,
+    firmwareBytes: firmware.length, applicationFreeBytes: app.size - firmware.length,
     rf24: false, partitions,
     files: images.map(([name, data, role, offset]) => ({
       name, role, offset, bytes: data.length,
@@ -89,11 +90,13 @@ function packageRelease({ root, profile, version, commit, outputRoot }) {
     "kc868-a6-base is a generic shared build configuration, not a board-specific validation profile.",
     "KC868-Ax aliases other than A6 reuse the A6 baseline pin map and are not electrically validated for those boards.",
     "The coprocessor profile configures a diagnostic UART; Zigbee/Thread stacks and the P17 protocol are not implemented.",
+    "Firmware updates are serial-only; this image uses one factory app partition and has no OTA rollback slot.",
+    "For one-time migration from the dual-slot layout, write-flash partitions.bin at 0x8000, firmware.bin at 0x10000, and littlefs.bin at 0x250000 in one esptool invocation. This preserves NVS at 0x9000..0xdfff; do not flash firmware.factory.bin for migration.",
     "Disconnect unsafe loads and confirm the board/serial port before a reset.",
     "Routine update: use PlatformIO upload then uploadfs, preserving NVS and partition layout.",
-    "firmware.bin is the OTA application; its serial offset targets app0, NOT the automatically selected inactive OTA slot.",
+    "firmware.bin is the application image at the offset recorded in manifest.json; it is not an OTA update.",
     "firmware.factory.bin is merged from offset 0 and DOES NOT include LittleFS.",
-    "Factory flashing can overwrite NVS padding and OTA metadata. Use only for intentional provisioning, not routine updates.",
+    "Factory flashing can overwrite NVS padding. Use only for intentional provisioning, not routine updates.",
     "Never erase flash/NVS or flash a factory image to preserve existing credentials/calibration.",
     "littlefs.bin replaces the web-assets filesystem. Offsets and SHA256 hashes are in manifest.json.",
     "P17/custom coprocessor protocols and automatic electrical calibration are not implemented.",
@@ -107,6 +110,6 @@ if (require.main === module) {
   const version = (tag || JSON.parse(fs.readFileSync("package.json", "utf8")).version).replace(/^v/, "");
   const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
   const result = packageRelease({ root, profile, version, commit, outputRoot: path.join(root, "dist", "releases", `v${version}`) });
-  console.log(`${result.output}: ${result.manifest.firmwareBytes} application bytes, ${result.manifest.otaRemainingBytes} OTA bytes remaining`);
+  console.log(`${result.output}: ${result.manifest.firmwareBytes} application bytes, ${result.manifest.applicationFreeBytes} application bytes free`);
 }
 module.exports = { parsePartitions, packageRelease, RELEASE_PROFILES };

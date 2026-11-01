@@ -143,6 +143,18 @@ test("UDP trigger configuration belongs to the IFTTT form, not the header", () =
   assert.ok(form.includes('id="iftttUdpPort"'));
   assert.ok(!html.slice(0, html.indexOf("</header>")).includes('id="iftttUdpFields"'));
 });
+test("IFTTT allows eight rules and exposes bounded sequential/continue action groups", () => {
+  const html = fs.readFileSync("data/index.html", "utf8");
+  const script = fs.readFileSync("data/app.js", "utf8");
+  const form = html.match(/<form[^>]*id="iftttBuilderForm"[\s\S]*?<\/form>/)[0];
+  assert.match(form, /option value="group"/);
+  assert.match(form, /id="iftttGroupAction"/);
+  assert.match(form, /id="iftttGroupMode"[\s\S]*?value="sequential"[\s\S]*?value="all"/);
+  assert.match(form, /id="addIftttGroupAction"/);
+  assert.match(html, /id="iftttRuleCount">0 \/ 8/);
+  assert.match(script, /iftttRules\.length >= 8/);
+  assert.match(script, /iftttGroupActions\.length >= 8/);
+});
 test("IFTTT exposes each saved BLE MAC once and refreshes after descriptor changes with unchanged revision", async () => {
   const data = fixture();
   data.modules[0].properties = [

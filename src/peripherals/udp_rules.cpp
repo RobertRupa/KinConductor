@@ -1,21 +1,30 @@
 #include "peripherals/udp_rules.h"
 #include "peripherals/transport.h"
+#include <algorithm>
 #include <cstring>
 
 namespace kc868a6::peripherals {
 namespace {
 const core::PeripheralDescriptor identity{"udp.rules", "ifttt-udp-receiver"};
-const std::array<core::PropertyDescriptor, 4> descriptors{{
+const std::array<core::PropertyDescriptor, iftttRuleCapacity> descriptors{{
     {"udp.rules/1/matches", core::ValueType::UnsignedInteger, ""},
     {"udp.rules/2/matches", core::ValueType::UnsignedInteger, ""},
     {"udp.rules/3/matches", core::ValueType::UnsignedInteger, ""},
     {"udp.rules/4/matches", core::ValueType::UnsignedInteger, ""},
+    {"udp.rules/5/matches", core::ValueType::UnsignedInteger, ""},
+    {"udp.rules/6/matches", core::ValueType::UnsignedInteger, ""},
+    {"udp.rules/7/matches", core::ValueType::UnsignedInteger, ""},
+    {"udp.rules/8/matches", core::ValueType::UnsignedInteger, ""}
 }};
-const std::array<core::TriggerDescriptor, 4> conditions{{
+const std::array<core::TriggerDescriptor, iftttRuleCapacity> conditions{{
     {"udp.rules/1/matches/condition", core::TriggerKind::Condition, descriptors[0].id},
     {"udp.rules/2/matches/condition", core::TriggerKind::Condition, descriptors[1].id},
     {"udp.rules/3/matches/condition", core::TriggerKind::Condition, descriptors[2].id},
     {"udp.rules/4/matches/condition", core::TriggerKind::Condition, descriptors[3].id},
+    {"udp.rules/5/matches/condition", core::TriggerKind::Condition, descriptors[4].id},
+    {"udp.rules/6/matches/condition", core::TriggerKind::Condition, descriptors[5].id},
+    {"udp.rules/7/matches/condition", core::TriggerKind::Condition, descriptors[6].id},
+    {"udp.rules/8/matches/condition", core::TriggerKind::Condition, descriptors[7].id}
 }};
 }
 core::Result readUdpRule(JsonVariantConst source, UdpRuleConfig &destination) {
@@ -61,8 +70,10 @@ core::Result readUdpRule(JsonVariantConst source, UdpRuleConfig &destination) {
     return {};
 }
 core::Result readUdpRules(JsonVariantConst rules, uint16_t globalPort, UdpRulesConfig &destination) {
-    if (!rules.is<JsonArrayConst>() || rules.size() > 4) return {core::ErrorCode::InvalidArgument, "udp_rules"};
+    if (!rules.is<JsonArrayConst>() || rules.size() > iftttRuleCapacity) return {core::ErrorCode::InvalidArgument, "udp_rules"};
     UdpRulesConfig next;
+    std::array<uint16_t, udpRuleSocketCapacity> ports{};
+    size_t portCount = 0;
     size_t index = 0;
     for (JsonVariantConst rule : rules.as<JsonArrayConst>()) {
         if (!rule.is<JsonObjectConst>() || !rule["enabled"].is<bool>() ||
@@ -74,6 +85,11 @@ core::Result readUdpRules(JsonVariantConst rules, uint16_t globalPort, UdpRulesC
             next[index].enabled = rule["enabled"].as<bool>();
             if (next[index].enabled && globalPort != 0 && next[index].port == globalPort) {
                 return {core::ErrorCode::ResourceConflict, "udp_global_port"};
+            }
+            if (next[index].enabled &&
+                std::find(ports.begin(), ports.begin() + portCount, next[index].port) == ports.begin() + portCount) {
+                if (portCount == ports.size()) return {core::ErrorCode::CapacityExceeded, "udp_rule_ports"};
+                ports[portCount++] = next[index].port;
             }
         }
         ++index;
@@ -93,7 +109,7 @@ core::List<core::PropertyDescriptor> UdpRules::properties() const { return descr
 core::List<core::TriggerDescriptor> UdpRules::triggers() const { return conditions; }
 core::Result UdpRules::begin(uint32_t now) { started_ = true; return tick(now); }
 void UdpRules::stop() {
-    for (uint8_t i = 0; i < 4; ++i) { hardware_.close(i); opened_[i] = false; }
+    for (uint8_t i = 0; i < udpRuleSocketCapacity; ++i) { hardware_.close(i); opened_[i] = false; }
     pending_.fill(0); started_ = false; health_ = {};
 }
 void UdpRules::configure(const UdpRulesConfig &config) {
@@ -105,17 +121,17 @@ void UdpRules::configure(const UdpRulesConfig &config) {
         if (!rule.enabled) continue;
         bool duplicate = false;
         for (size_t i = 0; i < count; ++i) duplicate |= ports_[i] == rule.port;
-        if (!duplicate) ports_[count++] = rule.port;
+        if (!duplicate && count < ports_.size()) ports_[count++] = rule.port;
     }
 }
 core::Result UdpRules::tick(uint32_t now) {
     if (!started_) return {core::ErrorCode::Unavailable, "udp_rules"};
     core::Result error;
     if (!hardware_.connected()) {
-        for (uint8_t i = 0; i < 4; ++i) { if (opened_[i]) hardware_.close(i); opened_[i] = false; }
+        for (uint8_t i = 0; i < udpRuleSocketCapacity; ++i) { if (opened_[i]) hardware_.close(i); opened_[i] = false; }
         pending_.fill(0);
     }
-    for (uint8_t socket = 0; socket < 4; ++socket) {
+    for (uint8_t socket = 0; socket < udpRuleSocketCapacity; ++socket) {
         if (!ports_[socket] || !hardware_.connected()) continue;
         core::Result result;
         if (!opened_[socket]) { result = hardware_.open(socket, ports_[socket]); opened_[socket] = result.ok(); }
@@ -128,7 +144,7 @@ core::Result UdpRules::tick(uint32_t now) {
             result = size <= data.size() ? Transport::validateText({data.data(), size}) :
                 core::Result{core::ErrorCode::CapacityExceeded, "udp_trigger_payload"};
             if (!result.ok()) break;
-            for (uint8_t rule = 0; rule < 4; ++rule) {
+            for (uint8_t rule = 0; rule < iftttRuleCapacity; ++rule) {
                 if (config_[rule].port != ports_[socket] ||
                     !matchesUdpRule(config_[rule], ip, remotePort, {data.data(), size})) continue;
                 if (pending_[rule] == 4) { result = {core::ErrorCode::CapacityExceeded, "udp_trigger_queue"}; break; }
@@ -141,7 +157,7 @@ core::Result UdpRules::tick(uint32_t now) {
             if (error.ok()) error = result;
         }
     }
-    for (uint8_t rule = 0; rule < 4; ++rule) {
+    for (uint8_t rule = 0; rule < iftttRuleCapacity; ++rule) {
         snapshots_[rule].value = counts_[rule];
         snapshots_[rule].quality = !config_[rule].enabled ? core::Quality::Disabled :
             !hardware_.connected() ? core::Quality::Unavailable : error.ok() ? core::Quality::Valid : core::Quality::Error;
@@ -151,11 +167,11 @@ core::Result UdpRules::tick(uint32_t now) {
     return error;
 }
 uint8_t UdpRules::consume(uint8_t rule) {
-    if (rule >= 4) return 0;
+    if (rule >= iftttRuleCapacity) return 0;
     const auto count = pending_[rule]; pending_[rule] = 0; return count;
 }
 core::Result UdpRules::readProperty(std::string_view id, core::PropertySnapshot &value) const {
-    for (size_t i = 0; i < 4; ++i) if (id == descriptors[i].id) { value = snapshots_[i]; return {}; }
+    for (size_t i = 0; i < descriptors.size(); ++i) if (id == descriptors[i].id) { value = snapshots_[i]; return {}; }
     return {core::ErrorCode::NotFound, "udp_rule_property"};
 }
 }

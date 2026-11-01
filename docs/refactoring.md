@@ -239,7 +239,8 @@ The following extension is implemented and deployed in the base A6 profile:
   detect BLE entry/leave and Wi-Fi connection/disconnection. The evaluator runs
   every 100 ms while the main loop is available; blocking legacy sensor/network
   operations can delay it, and bursts between evaluations are coalesced.
-  Four rules remain the limit. Provider-specific, side-effect-free validation
+  Eight rules are supported, including bounded composite actions. The generic
+  event engine and scheduler remain pending. Provider-specific, side-effect-free validation
   is shared by direct commands and saved generic rules, including text/host limits.
 - **PWM** adds `fan.main/duty` and action `fan.main/set` with `percent:0..100`.
   Default pin GPIO25 / DAC2 / DA-2, disabled by default; default frequency 1 kHz,
