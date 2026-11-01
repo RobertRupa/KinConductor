@@ -267,6 +267,9 @@ void WifiWebUi::startServer() {
     server_.on("/api/wifi", HTTP_POST, [this]() {
         if (requireAuthentication()) handleWifiSave();
     });
+    server_.on("/api/password", HTTP_POST, [this]() {
+        if (requireAuthentication()) handlePasswordChange();
+    });
     server_.on("/api/relay", HTTP_POST, [this]() {
         if (requireAuthentication()) handleRelay();
     });
@@ -533,6 +536,41 @@ void WifiWebUi::handleWifiSave() {
     server_.send(200, "application/json", "{\"saved\":true}");
     reconnectPending_ = true;
     reconnectAt_ = millis() + 1200;
+}
+
+void WifiWebUi::handlePasswordChange() {
+    if (!preferencesReady_) {
+        server_.send(503, "application/json", "{\"error\":\"nvs_unavailable\"}");
+        return;
+    }
+    if (server_.arg("plain").length() > 512) {
+        server_.send(413, "application/json", "{\"error\":\"password_request_too_large\"}");
+        return;
+    }
+
+    DynamicJsonDocument request(512);
+    if (deserializeJson(request, server_.arg("plain"))) {
+        server_.send(400, "application/json", "{\"error\":\"invalid_json\"}");
+        return;
+    }
+    const String currentPassword = request["currentPassword"] | "";
+    const String newPassword = request["newPassword"] | "";
+    if (currentPassword != webPassword_) {
+        server_.send(403, "application/json", "{\"error\":\"invalid_current_password\"}");
+        return;
+    }
+    if (newPassword.length() < 8 || newPassword.length() > 63) {
+        server_.send(400, "application/json", "{\"error\":\"invalid_password\"}");
+        return;
+    }
+    if (preferences_.putString("webpass", newPassword) != newPassword.length() ||
+        preferences_.getString("webpass", "") != newPassword) {
+        server_.send(500, "application/json", "{\"error\":\"password_storage_failed\"}");
+        return;
+    }
+
+    webPassword_ = newPassword;
+    server_.send(200, "application/json", "{\"changed\":true}");
 }
 
 void WifiWebUi::handleRelay() {

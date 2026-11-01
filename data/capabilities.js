@@ -673,6 +673,22 @@
     } catch (error) { $("networkSettingsMessage").textContent = error.message; }
     finally { button.disabled = false; }
   });
+  $("webPasswordForm").addEventListener("submit", async (event) => {
+    event.preventDefault(); const button = event.currentTarget.querySelector("[type=submit]"); button.disabled = true;
+    const message = $("webPasswordMessage");
+    try {
+      const currentPassword = $("currentWebPassword").value;
+      const newPassword = $("newWebPassword").value;
+      if (newPassword !== $("confirmWebPassword").value) throw new Error(text("Nowe hasła nie są identyczne.", "The new passwords do not match."));
+      if (newPassword.length < 8 || newPassword.length > 63) throw new Error("invalid_password");
+      await request("/api/password", { currentPassword, newPassword });
+      $("currentWebPassword").value = "";
+      $("newWebPassword").value = "";
+      $("confirmWebPassword").value = "";
+      message.textContent = text("Hasło zmienione. Odśwież stronę i zaloguj się nowym hasłem.", "Password changed. Reload the page and sign in with the new password.");
+    } catch (error) { message.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
   $("iftttCapabilityAction").addEventListener("change", renderIftttParameters);
   $("screenAddPage").addEventListener("click", () => {
     if (layout && layout.pages.length < 8) { layout.pages.push({ rows: 2, columns: 2 }); renderScreen(); }

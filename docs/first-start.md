@@ -29,6 +29,9 @@ finish provisioning promptly. On the regular Wi-Fi network, the dashboard uses
 HTTP Basic Authentication with the generated `admin` password stored in NVS
 and printed to serial. HTTP is not encrypted; keep it on a trusted LAN and do
 not forward its port to the internet.
+Change the WebGUI login password under **Settings → WebGUI password**. The
+current password is required; after saving, reload the page and authenticate
+with the new password.
 
 The dashboard's right-hand event stream reports IFTTT triggers and action
 failures, relay/DI/S2 changes, GPIO sensor configuration, and beeper tests. It

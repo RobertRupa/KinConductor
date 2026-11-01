@@ -332,6 +332,21 @@
         <p id="networkSettingsMessage" role="status"></p>
       </form>
       </details>
+      <details class="panel settings-accordion">
+        <summary data-i18n="webPasswordSettings">Hasło WebGUI</summary>
+        <form id="webPasswordForm">
+          <h2 data-i18n="webPasswordSettings">Hasło WebGUI</h2>
+          <label class="field-label" for="currentWebPassword" data-i18n="currentWebPassword">Obecne hasło</label>
+          <input id="currentWebPassword" type="password" minlength="8" maxlength="63" autocomplete="current-password" required>
+          <label class="field-label" for="newWebPassword" data-i18n="newWebPassword">Nowe hasło</label>
+          <input id="newWebPassword" type="password" minlength="8" maxlength="63" autocomplete="new-password" required>
+          <label class="field-label" for="confirmWebPassword" data-i18n="confirmWebPassword">Powtórz nowe hasło</label>
+          <input id="confirmWebPassword" type="password" minlength="8" maxlength="63" autocomplete="new-password" required>
+          <p class="field-hint" data-i18n="webPasswordHelp">Hasło musi mieć od 8 do 63 znaków. Po zmianie zaloguj się ponownie.</p>
+          <button type="submit" class="primary-button" data-i18n="changePassword">Zmień hasło</button>
+          <p id="webPasswordMessage" role="status"></p>
+        </form>
+      </details>
       <form id="schemaSettingsForm" class="panel">
         <div id="schemaFields"></div>
         <button type="submit" class="primary-button" data-i18n="saveSettings">Zapisz ustawienia</button>

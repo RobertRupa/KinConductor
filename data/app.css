@@ -36,8 +36,8 @@ button, select { cursor: pointer; }
 .current-panel { margin-top: 18px; }
 .current-channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .current-channel { min-width: 0; }
-.current-channel label, #networkSettingsForm .field-label { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; font-size: 12px; }
-.current-channel input:not([type="checkbox"]), .current-channel select, #networkSettingsForm input { width: 100%; min-height: 38px; padding: 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); }
+.current-channel label, #networkSettingsForm .field-label, #webPasswordForm .field-label { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; font-size: 12px; }
+.current-channel input:not([type="checkbox"]), .current-channel select, #networkSettingsForm input, #webPasswordForm input { width: 100%; min-height: 38px; padding: 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); }
 .current-channel input[type="checkbox"] { width: 20px; height: 20px; }
 .topbar {
   height: 68px;

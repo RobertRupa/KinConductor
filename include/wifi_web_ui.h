@@ -89,6 +89,7 @@ private:
     void loadScreen();
     void handleScan();
     void handleWifiSave();
+    void handlePasswordChange();
     void handleRelay();
     void handleBeeperTest();
     void handleSettings(bool save);

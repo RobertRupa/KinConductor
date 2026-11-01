@@ -116,6 +116,9 @@ submitting.
 The hostname is saved separately. After a hostname change, the device
 reconnects to Wi-Fi, so the panel may be briefly unavailable. Reconnect using
 the new IP address or `http://<hostname>.local/`.
+The **WebGUI password** section changes the Basic Auth password. Enter the
+current password and confirm a new password of 8–63 characters; reload and
+sign in again after saving.
 
 ## Diagnostics — detected devices and resources
 

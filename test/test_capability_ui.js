@@ -6,10 +6,11 @@ const test = require("node:test");
 function element() {
   return {
     children: [], dataset: {}, style: {}, value: "", textContent: "",
+    listeners: {}, disabled: false,
     append(...items) { for (const item of items) { item.parent = this; this.children.push(item); } },
     replaceChildren(...items) { this.children = items; },
     remove() { this.parent.children = this.parent.children.filter(item => item !== this); },
-    addEventListener() {}, setAttribute() {},
+    addEventListener(type, callback) { this.listeners[type] = callback; }, setAttribute() {},
     querySelectorAll(selector) { return selector === "[data-capability]" ?
       this.children.filter(item => item.dataset.capability) : []; }
   };
@@ -125,6 +126,39 @@ test("hostname HTML pattern escapes the hyphen for browser Unicode sets", () => 
   const regex = new RegExp(`^(?:${pattern})$`, "u");
   assert.ok(regex.test("kinconductor") && regex.test("KC868-A6"));
   assert.ok(!regex.test("a.local") && !regex.test("-host") && !regex.test("host-"));
+});
+test("WebGUI password form validates confirmation and submits without exposing saved credentials", async () => {
+  const html = fs.readFileSync("data/index.html", "utf8");
+  const form = html.match(/<form id="webPasswordForm">([\s\S]*?)<\/form>/)[1];
+  assert.match(form, /id="currentWebPassword"[^>]*autocomplete="current-password"/);
+  assert.match(form, /id="newWebPassword"[^>]*autocomplete="new-password"/);
+  assert.match(form, /id="confirmWebPassword"[^>]*autocomplete="new-password"/);
+  const requests = [];
+  const { elements } = harness(async (url, options) => {
+    requests.push({ url, body: JSON.parse(options.body) });
+    return { ok: true, headers: { get: () => "application/json" }, json: async () => ({ changed: true }) };
+  });
+  for (const id of ["currentWebPassword", "newWebPassword", "confirmWebPassword", "webPasswordMessage"]) {
+    elements.set(id, element());
+  }
+  const set = (id, value) => { elements.get(id).value = value; };
+  const submit = elements.get("webPasswordForm").listeners.submit;
+  const event = { preventDefault() {}, currentTarget: { querySelector: () => ({ disabled: false }) } };
+  set("currentWebPassword", "old-password");
+  set("newWebPassword", "new-password");
+  set("confirmWebPassword", "different-password");
+  await submit(event);
+  assert.equal(requests.length, 0);
+  assert.match(elements.get("webPasswordMessage").textContent, /do not match/);
+  set("confirmWebPassword", "new-password");
+  await submit(event);
+  assert.deepEqual(requests, [{ url: "/api/password", body: {
+    currentPassword: "old-password", newPassword: "new-password"
+  } }]);
+  assert.match(elements.get("webPasswordMessage").textContent, /Password changed/);
+  assert.equal(elements.get("currentWebPassword").value, "");
+  assert.equal(elements.get("newWebPassword").value, "");
+  assert.equal(elements.get("confirmWebPassword").value, "");
 });
 test("settings fields are categorized once, in stable functional order", () => {
   const { api } = harness();

@@ -12,22 +12,22 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "/home/konatsu/Documents/KC868-A6/.pio/build/kc868-a6-coprocessor/firmware.elf",
-            "projectEnvName": "kc868-a6-coprocessor",
+            "executable": "/home/konatsu/Documents/KC868-A6/.pio/build/kc868-a6/firmware.elf",
+            "projectEnvName": "kc868-a6",
             "toolchainBinDir": "/home/konatsu/.platformio/packages/toolchain-xtensa-esp-elf/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "svdPath": "/home/konatsu/.platformio/platforms/espressif32/misc/svd/esp32.svd",
             "preLaunchTask": {
                 "type": "PlatformIO",
-                "task": "Pre-Debug"
+                "task": "Pre-Debug (kc868-a6)"
             }
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "/home/konatsu/Documents/KC868-A6/.pio/build/kc868-a6-coprocessor/firmware.elf",
-            "projectEnvName": "kc868-a6-coprocessor",
+            "executable": "/home/konatsu/Documents/KC868-A6/.pio/build/kc868-a6/firmware.elf",
+            "projectEnvName": "kc868-a6",
             "toolchainBinDir": "/home/konatsu/.platformio/packages/toolchain-xtensa-esp-elf/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "svdPath": "/home/konatsu/.platformio/platforms/espressif32/misc/svd/esp32.svd"
@@ -36,8 +36,8 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (without uploading)",
-            "executable": "/home/konatsu/Documents/KC868-A6/.pio/build/kc868-a6-coprocessor/firmware.elf",
-            "projectEnvName": "kc868-a6-coprocessor",
+            "executable": "/home/konatsu/Documents/KC868-A6/.pio/build/kc868-a6/firmware.elf",
+            "projectEnvName": "kc868-a6",
             "toolchainBinDir": "/home/konatsu/.platformio/packages/toolchain-xtensa-esp-elf/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "svdPath": "/home/konatsu/.platformio/platforms/espressif32/misc/svd/esp32.svd",

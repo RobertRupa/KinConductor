@@ -67,7 +67,11 @@ profile archives to GitHub Releases after every job passes. The A4/A8/A8S/A16/
 A32/A64/A128 aliases reuse the A6 baseline pin map and are not electrically
 validated for those boards. Version **1.1.4** updates this release workflow.
 
-The working tree prepares **1.1.7** with one 2.25 MiB factory application
+Version **1.1.8** adds a Settings form for changing the WebGUI Basic Auth
+password; the current password is required and the new password must be
+confirmed. After saving, sign in again with the new password.
+
+Version **1.1.7** uses one 2.25 MiB factory application
 partition and 1.625 MiB LittleFS instead of the unused second OTA slot. This
 firmware has no OTA update or rollback path; updates are serial-only. Migration
 from the previous partition layout requires uploading the firmware/partition
@@ -95,13 +99,14 @@ and the required one-time migration steps instead.
 ## Quick start
 
 ```sh
-pio run -e kc868-a6-coprocessor
+pio run -e kc868-a6
 npm test
 ```
 
-The default profile is `kc868-a6-coprocessor`. It currently uses UART1 on
-GPIO16/17 for diagnostics. UART2 supports a configurable RS-485/P17 route and
-raw serial or Modbus RTU; P17 coprocessor, Zigbee/Thread/custom bridge
+The generic default profile is `kc868-a6-base`; for the physical KC868-A6 use
+`kc868-a6`. The separate `kc868-a6-coprocessor` profile currently uses UART1
+on GPIO16/17 for diagnostics. UART2 supports a configurable RS-485/P17 route
+and raw serial or Modbus RTU; P17 coprocessor, Zigbee/Thread/custom bridge
 protocols remain unimplemented. Existing NVS settings take precedence over
 profile defaults.
 

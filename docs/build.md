@@ -18,7 +18,14 @@ Select the serial upload port in the PlatformIO toolbar or add
 `upload_port = /dev/ttyUSB0` to `platformio.ini` for your system.
 Use the matching `-e` environment when uploading a feature-specific build.
 
-## Version 1.1.7 working tree: serial profiles and boiler interface
+## Version 1.1.8: WebGUI password change
+
+Settings now lets an authenticated user change the WebGUI Basic Auth password.
+The current password is required, the new password must be 8–63 characters,
+and the form asks for confirmation. Reload the page and authenticate again
+after saving. See [first start](./first-start.md) for network security limits.
+
+## Version 1.1.7: serial profiles and boiler interface
 
 The repository has no firmware OTA updater; the former second application slot
 was unused. The partition table now has one **2.25 MiB** factory application
