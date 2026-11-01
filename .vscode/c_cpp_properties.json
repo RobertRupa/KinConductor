@@ -769,7 +769,7 @@
             "defines": [
                 "PLATFORMIO=60200",
                 "ARDUINO_ESP32_DEV",
-                "KINCONDUCTOR_VERSION=\"1.1.6\"",
+                "KINCONDUCTOR_VERSION=\"1.1.7\"",
                 "KC868_TARGET_MODEL=\"KC868-A6\"",
                 "USE_ZIGBEE_THREAD_COPROCESSOR",
                 "KC868_BOARD_PROFILE_COPROCESSOR",
